@@ -39,12 +39,12 @@ Run the `.exe` to install PeliVeli like any normal Windows application.
 
 ---
 
-## IGDB Setup (optional — for Epic, Ubisoft, EA cover art)
+## SteamGridDB Setup (optional — for Epic, Ubisoft, EA cover art)
 
-1. Go to [dev.twitch.tv/console](https://dev.twitch.tv/console)
-2. Register an application (any name, redirect URL: `http://localhost`, category: Application Integration)
-3. Copy the **Client ID** and generate a **Client Secret**
-4. Enter both in PeliVeli's first-run setup screen (or Settings → Account later)
+1. Go to [https://www.steamgriddb.com](https://www.steamgriddb.com)
+2. Log in with your Steam account
+3. Copy the API under Preferences
+4. Enter it in PeliVeli's first-run setup screen (or Settings → Account later)
 
 Steam and GOG cover art works without any API key.
 
