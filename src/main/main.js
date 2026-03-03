@@ -214,6 +214,12 @@ function registerIpcHandlers() {
 
   ipcMain.handle('themes:getDir', () => themesDir)
 
+  ipcMain.handle('shell:openExternal', (_, url) => {
+    if (url && (url.startsWith('https://') || url.startsWith('http://'))) {
+      shell.openExternal(url)
+    }
+  })
+
   ipcMain.handle('games:launch', async (_, game) => {
     try {
       if (game.launchUri)  { await shell.openExternal(game.launchUri) }

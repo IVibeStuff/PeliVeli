@@ -77,6 +77,15 @@ function ReviewBadge({ game, coverHeight }) {
   )
 }
 
+function isLight(hex) {
+  try {
+    const c = (hex || '').replace('#', '')
+    if (c.length < 6) return false
+    const r = parseInt(c.slice(0,2),16), g = parseInt(c.slice(2,4),16), b = parseInt(c.slice(4,6),16)
+    return (r*299 + g*587 + b*114) / 1000 > 160
+  } catch(_) { return false }
+}
+
 export default function GameGrid({ games, selectedGame, onSelectGame, hiddenIds }) {
   const s    = useContext(SettingsContext)
   const size = s.cardSize            || 'medium'
@@ -84,6 +93,8 @@ export default function GameGrid({ games, selectedGame, onSelectGame, hiddenIds 
   const H    = CARD_HEIGHTS[size]
   const font = s.fontFamily          || 'Segoe UI'
   const pri  = s.fontColorPrimary    || '#d4d6e0'
+  // Card title sits on the appBg gradient — derive colour from background brightness
+  const cardTitleColor = isLight(s.appBackground || '#0c0e16') ? '#1a1a14' : '#ffffff'
   const sec  = s.fontColorSecondary  || '#7a7f9a'
   const appBg          = s.appBackground    || '#0c0e16'
   const titleSize      = s.fontSizeTitle    || 15
@@ -168,7 +179,7 @@ export default function GameGrid({ games, selectedGame, onSelectGame, hiddenIds 
               {/* Title */}
               <div style={{ padding: `${titlePadTop} 8px 8px`, fontFamily: font }}>
                 <div style={{
-                  fontSize: titleSize, color: pri, fontWeight: 600, lineHeight: 1.25,
+                  fontSize: titleSize, color: cardTitleColor, fontWeight: 600, lineHeight: 1.25,
                   overflow: 'hidden', display: '-webkit-box',
                   WebkitLineClamp: 2, WebkitBoxOrient: 'vertical',
                 }}>

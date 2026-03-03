@@ -12,6 +12,21 @@ function safeReadDir(dirPath) {
   try { return fs.readdirSync(dirPath) } catch (_) { return [] }
 }
 
+// Recursively sum file sizes. Caps at 10,000 files to avoid hanging on huge installs.
+function dirSize(dirPath, _count = { n: 0 }) {
+  if (!dirPath || !fs.existsSync(dirPath)) return 0
+  let total = 0
+  let entries
+  try { entries = fs.readdirSync(dirPath, { withFileTypes: true }) } catch (_) { return 0 }
+  for (const entry of entries) {
+    if (_count.n++ > 10000) break
+    const full = path.join(dirPath, entry.name)
+    if (entry.isDirectory())   total += dirSize(full, _count)
+    else if (entry.isFile()) { try { total += fs.statSync(full).size } catch (_) {} }
+  }
+  return total
+}
+
 function tryRegistry(hive, key, valueName) {
   try {
     const Registry = require('winreg')
@@ -45,12 +60,6 @@ function tryRegistryValues(hive, key) {
       })
     })
   } catch (_) { return Promise.resolve({}) }
-}
-
-// Convenience wrappers keeping old call sites working (default to HKLM)
-function tryRegistryLegacy(key, valueName) {
-  const Registry = require('winreg')
-  return tryRegistry(Registry.HKLM, key, valueName)
 }
 
 function parseVdf(text) {
@@ -99,18 +108,12 @@ async function scanSteam(sendProgress) {
     if (fs.existsSync(path.join(c, 'steamapps'))) { steamRoot = c; break }
   }
 
-  // Try registry — both HKLM and HKCU (some installs are per-user)
   if (!steamRoot) {
     for (const hive of [Registry.HKLM, Registry.HKCU]) {
       const regPath = await tryRegistry(hive, '\\SOFTWARE\\Valve\\Steam', 'InstallPath')
-      if (regPath && fs.existsSync(path.join(regPath, 'steamapps'))) {
-        steamRoot = regPath; break
-      }
-      // Also try WOW6432Node for 32-bit Steam on 64-bit Windows
+      if (regPath && fs.existsSync(path.join(regPath, 'steamapps'))) { steamRoot = regPath; break }
       const regPath32 = await tryRegistry(hive, '\\SOFTWARE\\WOW6432Node\\Valve\\Steam', 'InstallPath')
-      if (regPath32 && fs.existsSync(path.join(regPath32, 'steamapps'))) {
-        steamRoot = regPath32; break
-      }
+      if (regPath32 && fs.existsSync(path.join(regPath32, 'steamapps'))) { steamRoot = regPath32; break }
     }
   }
 
@@ -151,6 +154,23 @@ async function scanSteam(sendProgress) {
       const name       = app['name']       || app['Name']
       const installDir = app['installdir']
       if (!appId || !name) continue
+      // Filter out tools, SDKs, redistributables and VR runtimes
+      const appIdNum = parseInt(appId)
+      const nameLower = name.toLowerCase()
+      const isToolOrRedist = (
+        nameLower.includes('redistributable') ||
+        nameLower.includes('steamvr')         ||
+        nameLower.includes('steam linux')     ||
+        nameLower.includes('proton')          ||
+        nameLower.includes('steam controller') ||
+        nameLower === 'steamworks common redistributables' ||
+        appIdNum === 228980  || // Steamworks Common Redistributables
+        appIdNum === 1070560 || // Steam Linux Runtime
+        appIdNum === 250820  || // SteamVR
+        appIdNum === 1391110 || // Steam Linux Runtime - Soldier
+        appIdNum === 1628350    // Steam Linux Runtime - Sniper
+      )
+      if (isToolOrRedist) continue
       games.push({
         id: generateId('steam', appId),
         title: name,
@@ -195,7 +215,7 @@ async function scanEpic(sendProgress) {
         platform: 'Epic',
         appId: data.AppName,
         installDir: data.InstallLocation || null,
-        sizeBytes: 0,
+        sizeBytes: dirSize(data.InstallLocation || null),
         launchUri: `com.epicgames.launcher://apps/${data.AppName}?action=launch&silent=true`,
         coverArt: null, ocScore: null, ocTier: null, ocRecommend: null,
       })
@@ -213,8 +233,6 @@ async function scanGog(sendProgress) {
   const games = []
   const Registry = require('winreg')
 
-  // GOG can live in HKLM or HKCU, and in WOW6432Node on 64-bit Windows.
-  // Build a priority list of all combinations to try.
   const regCandidates = [
     { hive: Registry.HKLM, key: '\\SOFTWARE\\GOG.com\\Games' },
     { hive: Registry.HKLM, key: '\\SOFTWARE\\WOW6432Node\\GOG.com\\Games' },
@@ -227,10 +245,10 @@ async function scanGog(sendProgress) {
   for (const { hive, key } of regCandidates) {
     const subkeys = await tryRegistryKeys(hive, key)
     for (const subkey of subkeys) {
-      const values = await tryRegistryValues(hive, subkey.key)
-      const gameId    = values['gameID'] || values['GAMEID'] || subkey.key.split('\\').pop()
-      const name      = values['GAMENAME'] || values['gameName'] || values['GameName']
-      const exePath   = values['exe']  || values['EXE']  || values['Exe']
+      const values     = await tryRegistryValues(hive, subkey.key)
+      const gameId     = values['gameID'] || values['GAMEID'] || subkey.key.split('\\').pop()
+      const name       = values['GAMENAME'] || values['gameName'] || values['GameName']
+      const exePath    = values['exe']  || values['EXE']  || values['Exe']
       const installDir = values['PATH'] || values['path'] || values['InstallPath']
 
       if (!name || seenIds.has(String(gameId))) continue
@@ -242,9 +260,7 @@ async function scanGog(sendProgress) {
         platform: 'GOG',
         appId: String(gameId),
         installDir: installDir || null,
-        sizeBytes: 0,
-        // Prefer the GOG Galaxy URI scheme — works regardless of install path.
-        // Fall back to direct exe if URI scheme unavailable.
+        sizeBytes: dirSize(installDir || null),
         launchUri: `goggalaxy://rungameid/${gameId}`,
         exePath: exePath || null,
         coverArt: null, ocScore: null, ocTier: null, ocRecommend: null,
@@ -274,8 +290,8 @@ async function scanUbisoft(sendProgress) {
   for (const { hive, key } of regCandidates) {
     const subkeys = await tryRegistryKeys(hive, key)
     for (const subkey of subkeys) {
-      const values    = await tryRegistryValues(hive, subkey.key)
-      const gameId    = subkey.key.split('\\').pop()
+      const values     = await tryRegistryValues(hive, subkey.key)
+      const gameId     = subkey.key.split('\\').pop()
       const installDir = values['InstallDir'] || values['installdir']
 
       if (!installDir || seenIds.has(gameId)) continue
@@ -292,7 +308,7 @@ async function scanUbisoft(sendProgress) {
         platform: 'Ubisoft',
         appId: String(gameId),
         installDir,
-        sizeBytes: 0,
+        sizeBytes: dirSize(installDir),
         launchUri: `uplay://launch/${gameId}/0`,
         coverArt: null, ocScore: null, ocTier: null, ocRecommend: null,
       })
@@ -316,6 +332,7 @@ async function scanEA(sendProgress) {
   ]
 
   let found = false
+  const seenContentIds = new Set()
   for (const manifestDir of manifestDirs) {
     if (!fs.existsSync(manifestDir)) continue
     found = true
@@ -326,15 +343,21 @@ async function scanEA(sendProgress) {
       try {
         const params    = new URLSearchParams(content)
         const contentId = params.get('id') || params.get('contentid')
-        const name      = params.get('ddiassetid') || params.get('contentid') || file.replace('.mfst', '')
-        if (!contentId) continue
+        const rawAssetId  = params.get('ddiassetid') || params.get('contentid') || file.replace('.mfst', '')
+        const installPath = params.get('dipinstallpath') || ''
+        // Prefer install folder name — it's human-readable ('Battlefield 6' not 'Battlefield6_BaseGame')
+        const name = installPath
+          ? path.basename(installPath)
+          : rawAssetId.replace(/_BaseGame.*|_Standard.*|_Deluxe.*|_Premium.*/i, '').replace(/_/g, ' ').replace(/@.*/, '').trim()
+        if (!contentId || seenContentIds.has(contentId)) continue
+        seenContentIds.add(contentId)
         games.push({
           id: generateId('ea', contentId),
-          title: name.replace(/@.*/, '').replace(/_/g, ' '),
+          title: name,
           platform: 'EA',
           appId: contentId,
-          installDir: params.get('dipinstallpath') || null,
-          sizeBytes: 0,
+          installDir: installPath || null,
+          sizeBytes: dirSize(params.get('dipinstallpath') || null),
           launchUri: `origin://launchgame/${contentId}`,
           coverArt: null, ocScore: null, ocTier: null, ocRecommend: null,
         })
@@ -342,30 +365,28 @@ async function scanEA(sendProgress) {
     }
   }
 
-  // Registry fallback for EA
-  if (!found) {
-    for (const { hive, key } of [
-      { hive: Registry.HKLM, key: '\\SOFTWARE\\EA Games' },
-      { hive: Registry.HKLM, key: '\\SOFTWARE\\WOW6432Node\\EA Games' },
+    if (!found) {
+    const seenRegPaths={}, seenRegTitles={}
+    for (const {hive,key} of [
+      {hive:Registry.HKLM, key:"\\SOFTWARE\\EA Games"},
+      {hive:Registry.HKLM, key:"\\SOFTWARE\\WOW6432Node\\EA Games"},
     ]) {
-      const regKeys = await tryRegistryKeys(hive, key)
+      const regKeys=await tryRegistryKeys(hive,key)
       if (!regKeys.length) continue
-      found = true
+      found=true
       for (const rkey of regKeys) {
-        const values     = await tryRegistryValues(hive, rkey.key)
-        const name       = rkey.key.split('\\').pop()
-        const installDir = values['Install Dir'] || values['InstallDir']
-        const contentId  = values['ContentID']   || values['contentID'] || name
-        games.push({
-          id: generateId('ea', contentId),
-          title: name,
-          platform: 'EA',
-          appId: contentId,
-          installDir: installDir || null,
-          sizeBytes: 0,
-          launchUri: `origin://launchgame/${contentId}`,
-          coverArt: null, ocScore: null, ocTier: null, ocRecommend: null,
-        })
+        const values=await tryRegistryValues(hive,rkey.key)
+        const rawName=rkey.key.split("\\").pop()
+        const installDir=values["Install Dir"]||values["InstallDir"]
+        const contentId=values["ContentID"]||values["contentID"]||rawName
+        const name=installDir?require("path").basename(installDir):rawName
+        const ikey=installDir?installDir.toLowerCase():""
+        const nt=name.toLowerCase().replace(/[^a-z0-9]/g,"")
+        if (ikey&&seenRegPaths[ikey]) continue
+        if (seenRegTitles[nt]) continue
+        if (ikey) seenRegPaths[ikey]=true
+        seenRegTitles[nt]=true
+        games.push({id:generateId("ea",contentId),title:name,platform:"EA",appId:contentId,installDir:installDir||null,sizeBytes:dirSize(installDir||null),launchUri:"origin://launchgame/"+contentId,coverArt:null,ocScore:null,ocTier:null,ocRecommend:null})
       }
     }
   }
@@ -400,10 +421,21 @@ async function scanAll(sendProgress) {
     }
   }
 
-  sendProgress(`Scan complete. ${allGames.length} games found.`)
+  // Cross-platform dedup: EA Desktop registers ALL EA-connected games including those
+  // bought on Steam/Epic/GOG. Remove EA entries where another platform already has the same title.
+  function norm(t) {
+    return (t || '').toLowerCase().replace(/[^a-z0-9]/g, ' ').replace(/\s+/g, ' ').trim()
+  }
+  const nonEaTitles = new Set(allGames.filter(g => g.platform !== 'EA').map(g => norm(g.title)))
+  const deduped = allGames.filter(g => {
+    if (g.platform !== 'EA') return true
+    return !nonEaTitles.has(norm(g.title))
+  })
+
+  sendProgress(`Scan complete. ${deduped.length} games found.`)
 
   return {
-    games: allGames,
+    games: deduped,
     meta: { lastScan: new Date().toISOString(), launchersFound, launchersNotFound },
   }
 }

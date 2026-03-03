@@ -27,4 +27,5 @@ contextBridge.exposeInMainWorld('peliVeli', {
   getThemesDir:     ()        => ipcRenderer.invoke('themes:getDir'),
   onScanProgress:   (cb) => { ipcRenderer.on('scan:progress',   (_, m) => cb(m)); return () => ipcRenderer.removeAllListeners('scan:progress') },
   onEnrichProgress: (cb) => { ipcRenderer.on('enrich:progress', (_, m) => cb(m)); return () => ipcRenderer.removeAllListeners('enrich:progress') },
+  openExternal:     (url) => ipcRenderer.invoke('shell:openExternal', url),
 })
