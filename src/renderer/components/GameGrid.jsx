@@ -1,204 +1,184 @@
-import { useState, useContext } from 'react'
+import { useContext } from 'react'
 import { SettingsContext } from '../App.jsx'
 
-const CARD_WIDTHS = { small: 118, medium: 152, large: 198 }
+const CARD_WIDTHS  = { small: 118, medium: 152, large: 198 }
+const CARD_HEIGHTS = { small: 177, medium: 228, large: 297 }
 
-function formatSize(b) {
-  if (!b || b === 0) return null
-  if (b > 1e9) return `${(b / 1e9).toFixed(1)} GB`
-  if (b > 1e6) return `${(b / 1e6).toFixed(0)} MB`
-  return `${b} bytes`
+const PLATFORM_DEFAULTS = {
+  Steam:   { primary: '#1a9fff', intensity: 0.12 },
+  Epic:    { primary: '#a0a0a0', intensity: 0.10 },
+  GOG:     { primary: '#a855f7', intensity: 0.10 },
+  Ubisoft: { primary: '#0070ff', intensity: 0.10 },
+  EA:      { primary: '#ff6b35', intensity: 0.10 },
 }
 
-function hexToRgb(hex) {
-  const h = hex.replace('#', '')
-  return { r: parseInt(h.slice(0,2),16), g: parseInt(h.slice(2,4),16), b: parseInt(h.slice(4,6),16) }
+function tierColor(tier) {
+  if (tier === 'Mighty') return '#00c896'
+  if (tier === 'Strong') return '#4a90e2'
+  if (tier === 'Fair')   return '#f0a020'
+  return '#e05050'
 }
 
-function platformCardBg(platform, settings, active) {
-  const pc = settings?.platformColors?.[platform]
-  if (!pc) return active ? '#252838' : '#1e2130'
-  const { r, g, b } = hexToRgb(pc.primary)
-  const i = (pc.intensity || 0.12) * (active ? 1.7 : 1)
-  return `rgba(${r},${g},${b},${i})`
+function formatSize(bytes) {
+  if (!bytes || bytes === 0) return null
+  if (bytes >= 1e9) return `${(bytes / 1e9).toFixed(1)} GB`
+  if (bytes >= 1e6) return `${(bytes / 1e6).toFixed(0)} MB`
+  return `${(bytes / 1e3).toFixed(0)} KB`
 }
 
-const OC_TIERS = {
-  Mighty: { color: '#f5c518', icon: '👑' },
-  Strong: { color: '#4caf50', icon: '💚' },
-  Fair:   { color: '#ff9800', icon: '🟡' },
-  Weak:   { color: '#f44336', icon: '🔴' },
+// ── Option C: pill badge — lives INSIDE cover div (overflow:hidden is fine) ──
+function PillBadge({ game }) {
+  if (!game.ocTier) return null
+  const col = tierColor(game.ocTier)
+  return (
+    <div style={{
+      position: 'absolute', top: 7, right: 7, zIndex: 2,
+      padding: '4px 8px', borderRadius: 20, background: col,
+      display: 'flex', alignItems: 'center', gap: 5,
+      boxShadow: '0 2px 8px rgba(0,0,0,0.55)',
+    }}>
+      <span style={{ fontSize: 12, fontWeight: 900, color: '#fff', lineHeight: 1, letterSpacing: '-0.3px' }}>
+        {game.ocScore ?? '?'}
+      </span>
+      <span style={{ width: 1, height: 11, background: 'rgba(255,255,255,0.4)', display: 'inline-block' }} />
+      <span style={{ fontSize: 7, fontWeight: 700, color: 'rgba(255,255,255,0.88)', letterSpacing: '0.07em', textTransform: 'uppercase' }}>
+        {game.ocTier}
+      </span>
+    </div>
+  )
 }
 
-export default function GameGrid({ games, hiddenIds, onSelect, selectedId }) {
-  const s = useContext(SettingsContext)
-  const cardWidth = CARD_WIDTHS[s?.cardSize || 'medium']
+// ── Option F: review badge — lives on the CARD wrapper, NOT inside the cover ──
+// Positioned absolutely on the card so it's never clipped by cover's overflow:hidden.
+// `coverHeight` tells it exactly where the cover/title boundary is.
+function ReviewBadge({ game, coverHeight }) {
+  if (!game.ocTier) return null
+  const col = tierColor(game.ocTier)
+  const BADGE_R = 23   // radius — badge is 46px wide
+  return (
+    <div style={{
+      position: 'absolute',
+      top: coverHeight - BADGE_R,   // straddles the cover bottom edge
+      left: '50%', transform: 'translateX(-50%)',
+      width: BADGE_R * 2, height: BADGE_R * 2, borderRadius: '50%',
+      background: col,
+      display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+      boxShadow: `0 0 18px ${col}66, 0 4px 12px rgba(0,0,0,0.7)`,
+      border: '2px solid rgba(255,255,255,0.18)',
+      zIndex: 10, pointerEvents: 'none',
+    }}>
+      <span style={{ fontSize: 14, fontWeight: 900, color: '#fff', lineHeight: 1, letterSpacing: '-0.5px' }}>
+        {game.ocScore ?? '?'}
+      </span>
+      <span style={{ fontSize: 6, fontWeight: 700, color: 'rgba(255,255,255,0.82)', letterSpacing: '0.06em', textTransform: 'uppercase', marginTop: 1 }}>
+        {game.ocTier}
+      </span>
+    </div>
+  )
+}
+
+export default function GameGrid({ games, selectedGame, onSelectGame, hiddenIds }) {
+  const s    = useContext(SettingsContext)
+  const size = s.cardSize            || 'medium'
+  const W    = CARD_WIDTHS[size]
+  const H    = CARD_HEIGHTS[size]
+  const font = s.fontFamily          || 'Segoe UI'
+  const pri  = s.fontColorPrimary    || '#d4d6e0'
+  const sec  = s.fontColorSecondary  || '#7a7f9a'
+  const appBg          = s.appBackground    || '#0c0e16'
+  const titleSize      = s.fontSizeTitle    || 15
+  const scoreBadgeStyle = s.scoreBadgeStyle || 'pill'
+  const isReview       = scoreBadgeStyle === 'review'
 
   if (games.length === 0) return (
-    <div style={{
-      flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
-      color: s?.fontColorSecondary || '#7a7f9a', fontSize: s?.fontSizeBase || 13,
-      fontFamily: s?.fontFamily || 'Segoe UI',
-      letterSpacing: '0.1em', textTransform: 'uppercase',
-    }}>
-      No games found — try scanning your library
+    <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
+      color: sec, fontSize: s.fontSizeBase || 13, fontFamily: font, background: appBg }}>
+      No games to show
     </div>
   )
 
   return (
-    <div style={{ flex: 1, overflowY: 'auto', padding: '14px 20px 24px' }}>
-      <div style={{
-        display: 'grid',
-        gridTemplateColumns: `repeat(auto-fill, minmax(${cardWidth}px, 1fr))`,
-        gap: 14,
-      }}>
-        {games.map(g => (
-          <GameCard key={g.id} game={g} isHidden={hiddenIds?.has(g.id)} onClick={() => onSelect(g)} selected={g.id === selectedId} settings={s} />
-        ))}
-      </div>
-    </div>
-  )
-}
+    <div style={{ flex: 1, overflowY: 'auto', padding: '20px 20px 20px 16px', background: appBg }}>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, alignItems: 'flex-start' }}>
+        {games.map(game => {
+          const pc         = (s.platformColors || {})[game.platform] || PLATFORM_DEFAULTS[game.platform] || { primary: '#888', intensity: 0.10 }
+          const col        = pc.primary
+          const intensity  = pc.intensity
+          const isSelected  = selectedGame?.id === game.id
+          const isHidden    = hiddenIds?.has(game.id)
+          const sizeLabel   = s.showSizeOnCards ? formatSize(game.sizeBytes) : null
+          const displayTitle = game.displayTitle || game.title
+          // Extra top padding on title area so review badge doesn't overlap game name
+          const titlePadTop = isReview && game.ocTier ? '26px' : '7px'
 
-function GameCard({ game, isHidden, onClick, selected, settings }) {
-  const [hovered, setHovered] = useState(false)
-  const [imgErr, setImgErr]   = useState(false)
-  const pc    = settings?.platformColors?.[game.platform] || {}
-  const color = pc.primary || '#6b7290'
-  const tier  = game.ocTier ? OC_TIERS[game.ocTier] : null
-  const active = hovered || selected
+          return (
+            <div key={game.id} onClick={() => onSelectGame(game)} style={{
+              width: W, flexShrink: 0, cursor: 'pointer', borderRadius: 10,
+              // overflow VISIBLE on the card wrapper so review badge is never clipped
+              overflow: 'visible',
+              border: `1px solid ${isSelected ? col + '88' : 'rgba(255,255,255,0.07)'}`,
+              // Use appBg as the gradient end so light themes (NASA-punk) look correct
+              background: `linear-gradient(160deg, ${col}${Math.round(intensity * 255).toString(16).padStart(2,'0')}, ${appBg})`,
+              boxShadow: isSelected ? `0 0 0 2px ${col}55, 0 8px 24px rgba(0,0,0,0.5)` : '0 2px 8px rgba(0,0,0,0.35)',
+              transition: 'all 0.18s', opacity: isHidden ? 0.4 : 1,
+              transform: isSelected ? 'translateY(-2px)' : 'none',
+              position: 'relative',
+            }}
+              onMouseEnter={e => { if (!isSelected) { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = `0 6px 20px rgba(0,0,0,0.5)` }}}
+              onMouseLeave={e => { if (!isSelected) { e.currentTarget.style.transform = 'none'; e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.35)' }}}
+            >
+              {/* Cover art — overflow:hidden scoped here only, keeps pill badge inside */}
+              <div style={{
+                position: 'relative', width: W, height: H,
+                background: appBg, overflow: 'hidden', borderRadius: '9px 9px 0 0',
+              }}>
+                {game.coverArt
+                  ? <img
+                      src={`peliveli://covers/${encodeURIComponent(game.coverArt.split(/[\\/]/).pop())}`}
+                      alt={displayTitle}
+                      style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                      onError={e => { e.target.style.display = 'none' }}
+                    />
+                  : <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <span style={{ fontSize: 28, opacity: 0.15 }}>🎮</span>
+                    </div>
+                }
+                {/* Platform badge */}
+                <div style={{
+                  position: 'absolute', bottom: 6, left: 6, padding: '2px 7px', borderRadius: 5,
+                  background: col + 'cc', fontSize: 9, fontWeight: 700, color: '#fff',
+                  letterSpacing: '0.07em', textTransform: 'uppercase', fontFamily: font,
+                }}>{game.platform}</div>
 
-  return (
-    <div
-      onClick={onClick}
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
-      title={game.title}
-      style={{
-        background: platformCardBg(game.platform, settings, active),
-        border: `1px solid ${active ? color + '44' : 'rgba(255,255,255,0.08)'}`,
-        borderRadius: 12, overflow: 'hidden', cursor: 'pointer',
-        transform: hovered ? 'translateY(-3px)' : 'translateY(0)',
-        transition: 'all 0.18s ease',
-        boxShadow: hovered ? `0 10px 28px rgba(0,0,0,0.4)` : '0 2px 6px rgba(0,0,0,0.2)',
-        opacity: isHidden ? 0.45 : 1,
-      }}
-    >
-      {/* Cover art */}
-      <div style={{ position: 'relative', aspectRatio: '3/4', width: '100%' }}>
-        {game.coverArt && !imgErr
-          ? <img src={game.coverArt} alt={game.title} onError={() => setImgErr(true)}
-              style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
-          : <FallbackCover game={game} />
-        }
+                {/* Size badge */}
+                {sizeLabel && (
+                  <div style={{
+                    position: 'absolute', bottom: 6, right: 6, padding: '2px 6px', borderRadius: 5,
+                    background: 'rgba(0,0,0,0.7)', fontSize: 9, color: sec, fontFamily: font,
+                  }}>{sizeLabel}</div>
+                )}
 
-        {/* Dark scrim at top so badges are always readable */}
-        <div style={{
-          position: 'absolute', top: 0, left: 0, right: 0, height: 44,
-          background: 'linear-gradient(rgba(0,0,0,0.55), transparent)',
-          pointerEvents: 'none',
-        }} />
-
-        {/* Platform badge — only show on cover when size row is NOT shown */}
-        {!settings?.showSizeOnCards && (
-          <div style={{ position: 'absolute', top: 7, left: 7 }}>
-            <PlatformBadge platform={game.platform} color={color} />
-          </div>
-        )}
-
-        {/* OC tier badge — solid dark pill, always visible */}
-        {tier && (
-          <div
-            title={`OpenCritic: ${game.ocTier}${game.ocScore ? ` (${game.ocScore})` : ''}`}
-            style={{ position: 'absolute', top: 7, right: 7 }}
-          >
-            <div style={{
-              background: 'rgba(0,0,0,0.72)',
-              border: `1px solid ${tier.color}70`,
-              borderRadius: 6, padding: '2px 6px',
-              fontSize: 11, lineHeight: 1.4,
-              backdropFilter: 'blur(4px)',
-            }}>
-              {tier.icon}
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Title + optional size badge row */}
-      <div style={{ padding: '8px 10px 10px' }}>
-        <div style={{
-          fontWeight: 600,
-          fontSize: settings?.fontSizeTitle || 13,
-          fontFamily: settings?.fontFamily || 'Segoe UI',
-          color: settings?.fontColorPrimary || '#d4d6e0',
-          lineHeight: 1.3,
-          whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-          marginBottom: settings?.showSizeOnCards ? 6 : 0,
-        }}>
-          {game.displayTitle || game.title}
-        </div>
-        {settings?.showSizeOnCards && (
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}>
-            {/* Platform pill */}
-            <div style={{ background: 'rgba(0,0,0,0.45)', border: `1px solid ${color}50`, borderRadius: 5, padding: '2px 7px', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-              <span style={{ width: 5, height: 5, borderRadius: '50%', background: color, display: 'inline-block', flexShrink: 0 }} />
-              <span style={{ color: settings?.fontColorPrimary || '#d4d6e0', fontWeight: 700, fontSize: 9, letterSpacing: '0.05em', textTransform: 'uppercase' }}>{game.platform}</span>
-            </div>
-            {/* Size pill */}
-            {formatSize(game.sizeBytes) && (
-              <div style={{ background: 'rgba(0,0,0,0.45)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 5, padding: '2px 7px' }}>
-                <span style={{ color: settings?.fontColorSecondary || '#7a7f9a', fontWeight: 600, fontSize: 9, letterSpacing: '0.04em', whiteSpace: 'nowrap' }}>
-                  {formatSize(game.sizeBytes)}
-                </span>
+                {/* Pill badge lives inside cover — fine with overflow:hidden */}
+                {scoreBadgeStyle === 'pill' && <PillBadge game={game} />}
               </div>
-            )}
-          </div>
-        )}
+
+              {/* Review badge lives on the CARD, not inside cover, so it's never clipped */}
+              {isReview && <ReviewBadge game={game} coverHeight={H} />}
+
+              {/* Title */}
+              <div style={{ padding: `${titlePadTop} 8px 8px`, fontFamily: font }}>
+                <div style={{
+                  fontSize: titleSize, color: pri, fontWeight: 600, lineHeight: 1.25,
+                  overflow: 'hidden', display: '-webkit-box',
+                  WebkitLineClamp: 2, WebkitBoxOrient: 'vertical',
+                }}>
+                  {displayTitle}
+                </div>
+              </div>
+            </div>
+          )
+        })}
       </div>
-    </div>
-  )
-}
-
-// Solid opaque badge — always readable regardless of cover art colour
-function PlatformBadge({ platform, color }) {
-  return (
-    <div style={{
-      background: 'rgba(0,0,0,0.75)',
-      border: `1px solid ${color}80`,
-      borderRadius: 5,
-      padding: '2px 7px',
-      display: 'inline-flex', alignItems: 'center', gap: 4,
-      backdropFilter: 'blur(4px)',
-    }}>
-      {/* Coloured dot */}
-      <span style={{ width: 6, height: 6, borderRadius: '50%', background: color, display: 'inline-block', flexShrink: 0 }} />
-      <span style={{ color: '#ffffff', fontWeight: 700, fontSize: 9, letterSpacing: '0.06em', textTransform: 'uppercase' }}>
-        {platform}
-      </span>
-    </div>
-  )
-}
-
-function FallbackCover({ game }) {
-  const initials = game.title.split(' ').map(w => w[0]).join('').slice(0, 3).toUpperCase()
-  const gradients = [
-    'linear-gradient(135deg,#1e2340,#2a3560)',
-    'linear-gradient(135deg,#1a1530,#2d1a50)',
-    'linear-gradient(135deg,#152030,#1e3850)',
-    'linear-gradient(135deg,#2a1400,#4a2800)',
-    'linear-gradient(135deg,#0e2218,#1a4030)',
-    'linear-gradient(135deg,#22102a,#3a1a48)',
-  ]
-  return (
-    <div style={{
-      width: '100%', height: '100%',
-      background: gradients[game.title.charCodeAt(0) % gradients.length],
-      display: 'flex', alignItems: 'center', justifyContent: 'center',
-    }}>
-      <span style={{ fontFamily: 'Bebas Neue, cursive', fontSize: 22, color: 'rgba(255,255,255,0.22)', letterSpacing: '0.1em' }}>
-        {initials}
-      </span>
     </div>
   )
 }

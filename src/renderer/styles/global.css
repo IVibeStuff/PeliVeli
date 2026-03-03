@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Rajdhani:wght@400;500;600;700&display=swap');
 
 *, *::before, *::after {
   box-sizing: border-box;
@@ -12,32 +12,43 @@ html, body, #root {
 }
 
 body {
-  font-family: 'Segoe UI', sans-serif;
-  background: #1a1d27;
-  color: #d4d6e0;
+  font-family: 'Rajdhani', sans-serif;
+  background: #0c0e16;
+  color: #c8cad8;
   -webkit-font-smoothing: antialiased;
 }
 
-::-webkit-scrollbar { width: 4px; }
-::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: #3a3d50; border-radius: 2px; }
-
-input, button, select { font-family: inherit; }
-button { cursor: pointer; }
-input::placeholder { color: #4a5068; }
-input:focus { outline: none; }
-
-.titlebar-drag { -webkit-app-region: drag; }
-.titlebar-no-drag { -webkit-app-region: no-drag; }
-
-@keyframes spin {
-  to { transform: rotate(360deg); }
+::-webkit-scrollbar {
+  width: 4px;
 }
-@keyframes slideInPanel {
-  from { transform: translateX(100%); }
-  to   { transform: translateX(0); }
+::-webkit-scrollbar-track {
+  background: transparent;
 }
-@keyframes fadeInUp {
-  from { opacity: 0; transform: translateX(-50%) translateY(8px); }
-  to   { opacity: 1; transform: translateX(-50%) translateY(0); }
+::-webkit-scrollbar-thumb {
+  background: #2a2d3e;
+  border-radius: 2px;
+}
+
+input, button {
+  font-family: 'Rajdhani', sans-serif;
+}
+
+button {
+  cursor: pointer;
+}
+
+input::placeholder {
+  color: #333a50;
+}
+
+input:focus {
+  outline: none;
+}
+
+/* Titlebar drag region */
+.titlebar-drag {
+  -webkit-app-region: drag;
+}
+.titlebar-no-drag {
+  -webkit-app-region: no-drag;
 }

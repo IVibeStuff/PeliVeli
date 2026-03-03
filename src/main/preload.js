@@ -1,39 +1,30 @@
 const { contextBridge, ipcRenderer } = require('electron')
 
 contextBridge.exposeInMainWorld('peliVeli', {
-  getConfig: () => ipcRenderer.invoke('config:get'),
-  setConfig: (config) => ipcRenderer.invoke('config:set', config),
-
-  getSettings: () => ipcRenderer.invoke('settings:get'),
-  setSettings: (settings) => ipcRenderer.invoke('settings:set', settings),
-
-  getScanMeta: () => ipcRenderer.invoke('scanmeta:get'),
-
-  getGames: () => ipcRenderer.invoke('games:get'),
-  scanGames: () => ipcRenderer.invoke('games:scan'),
-  enrichGames: () => ipcRenderer.invoke('games:enrich'),
-  reEnrichGames: () => ipcRenderer.invoke('games:reenrich'),
-  launchGame: (game) => ipcRenderer.invoke('games:launch', game),
-
-  listFonts: () => ipcRenderer.invoke('fonts:list'),
-  getDebugLogPath: () => ipcRenderer.invoke('debug:logPath'),
-
-  getHiddenIds:  ()    => ipcRenderer.invoke('hidden:get'),
-  hideGame:      (id)  => ipcRenderer.invoke('hidden:hide',   id),
-  unhideGame:    (id)  => ipcRenderer.invoke('hidden:unhide', id),
-
-  fetchOcById:      (gameId) => ipcRenderer.invoke('oc:fetchById',      gameId),
-  setGameOc:        (data)   => ipcRenderer.invoke('games:setOc',        data),
-  refreshOneGame:   (gameId) => ipcRenderer.invoke('games:refreshOne',   gameId),
-
-  onScanProgress: (cb) => {
-    const handler = (_, msg) => cb(msg)
-    ipcRenderer.on('scan:progress', handler)
-    return () => ipcRenderer.removeListener('scan:progress', handler)
-  },
-  onEnrichProgress: (cb) => {
-    const handler = (_, msg) => cb(msg)
-    ipcRenderer.on('enrich:progress', handler)
-    return () => ipcRenderer.removeListener('enrich:progress', handler)
-  },
+  getConfig:      ()       => ipcRenderer.invoke('config:get'),
+  setConfig:      (c)      => ipcRenderer.invoke('config:set', c),
+  getSettings:    ()       => ipcRenderer.invoke('settings:get'),
+  setSettings:    (s)      => ipcRenderer.invoke('settings:set', s),
+  getScanMeta:    ()       => ipcRenderer.invoke('scanmeta:get'),
+  getGames:       ()       => ipcRenderer.invoke('games:get'),
+  scanGames:      ()       => ipcRenderer.invoke('games:scan'),
+  enrichGames:    ()       => ipcRenderer.invoke('games:enrich'),
+  reEnrichGames:  ()       => ipcRenderer.invoke('games:reenrich'),
+  launchGame:     (g)      => ipcRenderer.invoke('games:launch', g),
+  listFonts:      ()       => ipcRenderer.invoke('fonts:list'),
+  getHiddenIds:   ()       => ipcRenderer.invoke('hidden:get'),
+  hideGame:       (id)     => ipcRenderer.invoke('hidden:hide', id),
+  unhideGame:     (id)     => ipcRenderer.invoke('hidden:unhide', id),
+  getDebugLogPath:()       => ipcRenderer.invoke('debug:logPath'),
+  setTitlebarTheme:(opts)  => ipcRenderer.invoke('titlebar:setTheme', opts),
+  fetchOcById:    (gameId) => ipcRenderer.invoke('oc:fetchById', gameId),
+  setGameOc:      (data)   => ipcRenderer.invoke('games:setOc', data),
+  refreshOneGame: (gameId) => ipcRenderer.invoke('games:refreshOne', gameId),
+  getCustomThemes:  ()        => ipcRenderer.invoke('themes:getCustom'),
+  installTheme:     ()        => ipcRenderer.invoke('themes:install'),
+  deleteTheme:      (fname)   => ipcRenderer.invoke('themes:delete', fname),
+  exportTheme:      (settings)=> ipcRenderer.invoke('themes:export', settings),
+  getThemesDir:     ()        => ipcRenderer.invoke('themes:getDir'),
+  onScanProgress:   (cb) => { ipcRenderer.on('scan:progress',   (_, m) => cb(m)); return () => ipcRenderer.removeAllListeners('scan:progress') },
+  onEnrichProgress: (cb) => { ipcRenderer.on('enrich:progress', (_, m) => cb(m)); return () => ipcRenderer.removeAllListeners('enrich:progress') },
 })
