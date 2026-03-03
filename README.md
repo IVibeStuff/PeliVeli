@@ -34,14 +34,14 @@ This starts the Vite dev server and Electron simultaneously. The app window will
 
 On first launch you'll see the **setup screen** asking for your IGDB credentials.
 
-To get your free IGDB credentials:
-1. Go to [dev.twitch.tv/console](https://dev.twitch.tv/console)
-2. Log in with a Twitch account (or create a free one)
-3. Click **Register Your Application**
-4. Give it any name (e.g. "PeliVeli"), set OAuth Redirect URL to `http://localhost`, Category to **Application Integration**
-5. Copy the **Client ID** shown on the app page
-6. Click **New Secret** to generate a **Client Secret**
-7. Paste both into PeliVeli's setup screen
+## SteamGridDB Setup (optional — for Epic, Ubisoft, EA cover art)
+
+1. Go to [https://www.steamgriddb.com](https://www.steamgriddb.com)
+2. Log in with your Steam account
+3. Copy the API under Preferences
+4. Enter it in PeliVeli's first-run setup screen (or Settings → Account later)
+
+Steam and GOG cover art works without any API key.
 
 If you only have Steam and GOG games, you can tick **Skip IGDB** — cover art will still work for those two platforms without any key.
 
