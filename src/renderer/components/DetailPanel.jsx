@@ -11,12 +11,16 @@ export default function DetailPanel({ game, isHidden, onClose, onLaunch, onHide,
   const [refreshing, setRefreshing] = useState(false)
   const s = useContext(SettingsContext)
 
-  const font        = s.fontFamily         || 'Segoe UI'
-  const textPrimary = s.fontColorPrimary   || '#d4d6e0'
-  const textSecondary = s.fontColorSecondary || '#7a7f9a'
-  const fontSizeBase  = s.fontSizeBase     || 13
-  const fontSizeTitle = s.fontSizeTitle    || 15
-  const fontSizeLabel = s.fontSizeLabel    || 11
+  const font          = s.fontFamily || 'Segoe UI'
+  // Use drawer colours so the panel is always readable regardless of theme
+  // (e.g. NASA-PUNK has dark-ink fontColorPrimary for the parchment app area,
+  //  but the detail panel has a dark background like the drawer)
+  const textPrimary   = s.drawerColorPrimary   || s.fontColorPrimary   || '#ffffff'
+  const textSecondary = s.drawerColorSecondary || s.fontColorSecondary || '#a0a8b8'
+  const panelBg       = s.drawerBackground || '#161820'
+  const fontSizeBase  = s.fontSizeBase  || 13
+  const fontSizeTitle = s.fontSizeTitle || 15
+  const fontSizeLabel = s.fontSizeLabel || 11
 
   async function handleLaunch() {
     setLaunching(true)
@@ -62,7 +66,7 @@ export default function DetailPanel({ game, isHidden, onClose, onLaunch, onHide,
 
       <div style={{
         position: 'fixed', top: 136, right: 0, bottom: 0, width: 340,
-        background: '#161820', borderLeft: '1px solid rgba(255,255,255,0.09)',
+        background: panelBg, borderLeft: '1px solid rgba(255,255,255,0.09)',
         borderTopLeftRadius: 14, zIndex: 100,
         display: 'flex', flexDirection: 'column', overflowY: 'auto',
         boxShadow: '-16px 0 48px rgba(0,0,0,0.5)',
@@ -97,7 +101,7 @@ export default function DetailPanel({ game, isHidden, onClose, onLaunch, onHide,
         }
         {/* Gradient fade at bottom */}
         <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: 80,
-          background: 'linear-gradient(transparent, #161820)' }} />
+          background: `linear-gradient(transparent, ${panelBg})` }} />
       </div>
 
       {/* Content */}
@@ -114,12 +118,12 @@ export default function DetailPanel({ game, isHidden, onClose, onLaunch, onHide,
           {/* Refresh tile */}
           <button onClick={handleRefresh} disabled={refreshing} style={{
             flex: 1, padding: '9px 6px',
-            background: '#1a1e2e', border: '1px solid rgba(255,255,255,0.08)',
+            background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)',
             borderRadius: 9, cursor: refreshing ? 'default' : 'pointer',
             display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5,
             transition: 'all 0.15s', color: refreshing ? '#3a5a8e' : '#6a90b8' }}
-            onMouseEnter={e => { if (!refreshing) { e.currentTarget.style.background = '#1a2540'; e.currentTarget.style.borderColor = 'rgba(74,128,192,0.4)'; e.currentTarget.style.color = '#90b8f0' }}}
-            onMouseLeave={e => { e.currentTarget.style.background = '#1a1e2e'; e.currentTarget.style.borderColor = 'rgba(255,255,255,0.08)'; e.currentTarget.style.color = refreshing ? '#3a5a8e' : '#6a90b8' }}>
+            onMouseEnter={e => { if (!refreshing) { e.currentTarget.style.background = 'rgba(74,128,192,0.15)'; e.currentTarget.style.borderColor = 'rgba(74,128,192,0.4)'; e.currentTarget.style.color = '#90b8f0' }}}
+            onMouseLeave={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.06)'; e.currentTarget.style.borderColor = 'rgba(255,255,255,0.1)'; e.currentTarget.style.color = refreshing ? '#3a5a8e' : '#6a90b8' }}>
             <span style={{ fontSize: 17, lineHeight: 1 }}>
               {refreshing
                 ? <span style={{ display:'inline-block', width:14, height:14, border:'2px solid #1e3060', borderTop:'2px solid #4a70ae', borderRadius:'50%', animation:'spinBtn 0.8s linear infinite' }} />
@@ -133,7 +137,7 @@ export default function DetailPanel({ game, isHidden, onClose, onLaunch, onHide,
           {/* Hide / Unhide tile */}
           <button onClick={() => isHidden ? onUnhide(game) : onHide(game)} style={{
             flex: 1, padding: '9px 6px',
-            background: isHidden ? 'rgba(100,200,100,0.06)' : '#1a1e2e',
+            background: isHidden ? 'rgba(100,200,100,0.06)' : 'rgba(255,255,255,0.06)',
             border: `1px solid ${isHidden ? 'rgba(100,200,100,0.2)' : 'rgba(255,255,255,0.08)'}`,
             borderRadius: 9, cursor: 'pointer',
             display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5,
@@ -143,7 +147,7 @@ export default function DetailPanel({ game, isHidden, onClose, onLaunch, onHide,
               else          { e.currentTarget.style.background = '#251a1a'; e.currentTarget.style.borderColor = 'rgba(220,80,80,0.35)'; e.currentTarget.style.color = '#e08080' }
             }}
             onMouseLeave={e => {
-              e.currentTarget.style.background = isHidden ? 'rgba(100,200,100,0.06)' : '#1a1e2e'
+              e.currentTarget.style.background = isHidden ? 'rgba(100,200,100,0.06)' : 'rgba(255,255,255,0.06)'
               e.currentTarget.style.borderColor = isHidden ? 'rgba(100,200,100,0.2)' : 'rgba(255,255,255,0.08)'
               e.currentTarget.style.color = isHidden ? '#6abf6a' : '#7a8090'
             }}>
@@ -189,7 +193,7 @@ export default function DetailPanel({ game, isHidden, onClose, onLaunch, onHide,
               <input value={ocUrl} onChange={e=>setOcUrl(e.target.value)}
                 onKeyDown={e => e.key === 'Enter' && handleFetchByUrl()}
                 placeholder="opencritic.com/game/12345/..."
-                style={{ flex:1, background:'#1e2130', border:'1px solid rgba(255,255,255,0.09)',
+                style={{ flex:1, background:'rgba(255,255,255,0.07)', border:'1px solid rgba(255,255,255,0.12)',
                   borderRadius:7, padding:'6px 10px', color:textPrimary, fontSize:fontSizeLabel,
                   fontFamily:font, outline:'none' }} />
               <button onClick={handleFetchByUrl} disabled={ocFetching} style={{
@@ -206,10 +210,10 @@ export default function DetailPanel({ game, isHidden, onClose, onLaunch, onHide,
 
         {/* Metadata */}
         <Section title="Details" textSecondary={textSecondary}>
-          <MetaRow label="Platform" value={game.platform} textSecondary={textSecondary} textPrimary={textPrimary} fontSize={fontSizeLabel} />
-          {game.installDir && <MetaRow label="Install Path" value={game.installDir} textSecondary={textSecondary} textPrimary={textPrimary} fontSize={fontSizeLabel} mono />}
-          {game.sizeBytes > 0 && <MetaRow label="Size" value={formatSize(game.sizeBytes)} textSecondary={textSecondary} textPrimary={textPrimary} fontSize={fontSizeLabel} />}
-          {game.appId && <MetaRow label="App ID" value={game.appId} textSecondary={textSecondary} textPrimary={textPrimary} fontSize={fontSizeLabel} mono />}
+          <MetaRow label="Platform" value={game.platform} textSecondary={textSecondary} textPrimary={textPrimary} labelSize={fontSizeLabel} valueSize={fontSizeBase} />
+          {game.installDir && <MetaRow label="Install Path" value={game.installDir} textSecondary={textSecondary} textPrimary={textPrimary} labelSize={fontSizeLabel} valueSize={fontSizeBase} mono />}
+          {game.sizeBytes > 0 && <MetaRow label="Size" value={formatSize(game.sizeBytes)} textSecondary={textSecondary} textPrimary={textPrimary} labelSize={fontSizeLabel} valueSize={fontSizeBase} />}
+          {game.appId && <MetaRow label="App ID" value={game.appId} textSecondary={textSecondary} textPrimary={textPrimary} labelSize={fontSizeLabel} valueSize={fontSizeBase} mono />}
         </Section>
 
         {/* Launch */}
@@ -240,11 +244,11 @@ function Section({ title, children, textSecondary }) {
   )
 }
 
-function MetaRow({ label, value, textSecondary, textPrimary, fontSize, mono }) {
+function MetaRow({ label, value, textSecondary, textPrimary, labelSize, valueSize, mono }) {
   return (
-    <div style={{ display:'flex', gap:8, marginBottom:7, alignItems:'flex-start' }}>
-      <span style={{ fontSize, color:textSecondary, flexShrink:0, width:80 }}>{label}</span>
-      <span style={{ fontSize, color:textPrimary, wordBreak:'break-all',
+    <div style={{ display:'flex', gap:8, marginBottom:8, alignItems:'flex-start' }}>
+      <span style={{ fontSize:labelSize, color:textSecondary, flexShrink:0, width:86, paddingTop:1 }}>{label}</span>
+      <span style={{ fontSize:valueSize, color:textPrimary, wordBreak:'break-all', lineHeight:1.4,
         fontFamily: mono ? 'Consolas, monospace' : 'inherit' }}>{value}</span>
     </div>
   )

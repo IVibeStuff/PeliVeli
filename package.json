@@ -1,6 +1,6 @@
 {
   "name": "peliveli",
-  "version": "1.0.0",
+  "version": "1.0.3",
   "description": "PeliVeli - Your unified game library",
   "main": "src/main/main.js",
   "scripts": {
