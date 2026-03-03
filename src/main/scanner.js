@@ -12,38 +12,31 @@ function safeReadDir(dirPath) {
   try { return fs.readdirSync(dirPath) } catch (_) { return [] }
 }
 
-function tryRegistry(key, valueName) {
-  // Synchronous registry read via winreg - wrapped in try/catch
+function tryRegistry(hive, key, valueName) {
   try {
     const Registry = require('winreg')
     return new Promise((resolve) => {
-      const reg = new Registry({ hive: Registry.HKLM, key })
-      reg.get(valueName, (err, item) => {
-        resolve(err ? null : item.value)
-      })
+      const reg = new Registry({ hive, key })
+      reg.get(valueName, (err, item) => resolve(err ? null : item.value))
     })
-  } catch (_) {
-    return Promise.resolve(null)
-  }
+  } catch (_) { return Promise.resolve(null) }
 }
 
-function tryRegistryKeys(key) {
+function tryRegistryKeys(hive, key) {
   try {
     const Registry = require('winreg')
     return new Promise((resolve) => {
-      const reg = new Registry({ hive: Registry.HKLM, key })
+      const reg = new Registry({ hive, key })
       reg.keys((err, keys) => resolve(err ? [] : keys))
     })
-  } catch (_) {
-    return Promise.resolve([])
-  }
+  } catch (_) { return Promise.resolve([]) }
 }
 
-function tryRegistryValues(key) {
+function tryRegistryValues(hive, key) {
   try {
     const Registry = require('winreg')
     return new Promise((resolve) => {
-      const reg = new Registry({ hive: Registry.HKLM, key })
+      const reg = new Registry({ hive, key })
       reg.values((err, items) => {
         if (err) return resolve({})
         const map = {}
@@ -51,13 +44,16 @@ function tryRegistryValues(key) {
         resolve(map)
       })
     })
-  } catch (_) {
-    return Promise.resolve({})
-  }
+  } catch (_) { return Promise.resolve({}) }
+}
+
+// Convenience wrappers keeping old call sites working (default to HKLM)
+function tryRegistryLegacy(key, valueName) {
+  const Registry = require('winreg')
+  return tryRegistry(Registry.HKLM, key, valueName)
 }
 
 function parseVdf(text) {
-  // Minimal VDF parser for Steam files
   const result = {}
   const stack = [result]
   const lines = text.split('\n')
@@ -65,15 +61,13 @@ function parseVdf(text) {
   while (i < lines.length) {
     const line = lines[i].trim()
     const keyMatch = line.match(/^"([^"]+)"$/)
-    const kvMatch = line.match(/^"([^"]+)"\s+"([^"]*)"$/)
+    const kvMatch  = line.match(/^"([^"]+)"\s+"([^"]*)"$/)
     if (kvMatch) {
       stack[stack.length - 1][kvMatch[1]] = kvMatch[2]
     } else if (keyMatch) {
       const obj = {}
       stack[stack.length - 1][keyMatch[1]] = obj
       stack.push(obj)
-    } else if (line === '{') {
-      // already pushed
     } else if (line === '}') {
       stack.pop()
     }
@@ -91,36 +85,37 @@ function generateId(platform, rawId) {
 async function scanSteam(sendProgress) {
   sendProgress('Scanning Steam...')
   const games = []
+  const Registry = require('winreg')
 
-  // Common Steam install locations
   const candidates = [
     'C:\\Program Files (x86)\\Steam',
     'C:\\Program Files\\Steam',
     path.join(os.homedir(), 'Steam'),
+    path.join(os.homedir(), 'AppData', 'Local', 'Steam'),
   ]
 
   let steamRoot = null
   for (const c of candidates) {
-    if (fs.existsSync(path.join(c, 'steamapps'))) {
-      steamRoot = c
-      break
-    }
+    if (fs.existsSync(path.join(c, 'steamapps'))) { steamRoot = c; break }
   }
 
-  // Also try registry
+  // Try registry — both HKLM and HKCU (some installs are per-user)
   if (!steamRoot) {
-    const regPath = await tryRegistry('\\SOFTWARE\\Valve\\Steam', 'InstallPath')
-    if (regPath && fs.existsSync(path.join(regPath, 'steamapps'))) {
-      steamRoot = regPath
+    for (const hive of [Registry.HKLM, Registry.HKCU]) {
+      const regPath = await tryRegistry(hive, '\\SOFTWARE\\Valve\\Steam', 'InstallPath')
+      if (regPath && fs.existsSync(path.join(regPath, 'steamapps'))) {
+        steamRoot = regPath; break
+      }
+      // Also try WOW6432Node for 32-bit Steam on 64-bit Windows
+      const regPath32 = await tryRegistry(hive, '\\SOFTWARE\\WOW6432Node\\Valve\\Steam', 'InstallPath')
+      if (regPath32 && fs.existsSync(path.join(regPath32, 'steamapps'))) {
+        steamRoot = regPath32; break
+      }
     }
   }
 
   if (!steamRoot) return { found: false, games }
 
-  // Find all library folders.
-  // Use a normalised Set to prevent duplicates: Steam's libraryfolders.vdf always
-  // lists the default steamapps path as entry 0, so without dedup every game in
-  // the primary library appears twice.
   const seenFolders = new Set()
   const libraryFolders = []
   function addLibFolder(p) {
@@ -132,8 +127,7 @@ async function scanSteam(sendProgress) {
   }
   addLibFolder(path.join(steamRoot, 'steamapps'))
 
-  const vdfPath = path.join(steamRoot, 'steamapps', 'libraryfolders.vdf')
-  const vdfText = safeRead(vdfPath)
+  const vdfText = safeRead(path.join(steamRoot, 'steamapps', 'libraryfolders.vdf'))
   if (vdfText) {
     const parsed = parseVdf(vdfText)
     const lf = parsed['libraryfolders'] || parsed['LibraryFolders'] || {}
@@ -146,7 +140,6 @@ async function scanSteam(sendProgress) {
     })
   }
 
-  // Parse appmanifests
   for (const folder of libraryFolders) {
     const files = safeReadDir(folder).filter(f => f.startsWith('appmanifest_') && f.endsWith('.acf'))
     for (const file of files) {
@@ -154,11 +147,10 @@ async function scanSteam(sendProgress) {
       if (!content) continue
       const parsed = parseVdf(content)
       const app = parsed['AppState'] || parsed['appstate'] || {}
-      const appId = app['appid'] || app['AppID']
-      const name = app['name'] || app['Name']
+      const appId      = app['appid']      || app['AppID']
+      const name       = app['name']       || app['Name']
       const installDir = app['installdir']
       if (!appId || !name) continue
-      // Skip non-game entries (tools, SDKs, etc.) — they usually have very low appids or specific names
       games.push({
         id: generateId('steam', appId),
         title: name,
@@ -167,10 +159,7 @@ async function scanSteam(sendProgress) {
         installDir: installDir ? path.join(folder, 'common', installDir) : null,
         sizeBytes: parseInt(app['SizeOnDisk'] || app['sizeonDisk'] || '0'),
         launchUri: `steam://rungameid/${appId}`,
-        coverArt: null,
-        ocScore: null,
-        ocTier: null,
-        ocRecommend: null,
+        coverArt: null, ocScore: null, ocTier: null, ocRecommend: null,
       })
     }
   }
@@ -199,7 +188,6 @@ async function scanEpic(sendProgress) {
     try {
       const data = JSON.parse(content)
       if (!data.DisplayName || !data.AppName) continue
-      // Skip engine / non-game items
       if (data.AppCategories && !data.AppCategories.includes('games')) continue
       games.push({
         id: generateId('epic', data.AppName),
@@ -209,16 +197,13 @@ async function scanEpic(sendProgress) {
         installDir: data.InstallLocation || null,
         sizeBytes: 0,
         launchUri: `com.epicgames.launcher://apps/${data.AppName}?action=launch&silent=true`,
-        coverArt: null,
-        ocScore: null,
-        ocTier: null,
-        ocRecommend: null,
+        coverArt: null, ocScore: null, ocTier: null, ocRecommend: null,
       })
     } catch (_) {}
   }
 
   sendProgress(`Epic: found ${games.length} games`)
-  return { found: true, games }
+  return { found: games.length > 0, games }
 }
 
 // ─── GOG ─────────────────────────────────────────────────────────────────────
@@ -226,31 +211,45 @@ async function scanEpic(sendProgress) {
 async function scanGog(sendProgress) {
   sendProgress('Scanning GOG...')
   const games = []
+  const Registry = require('winreg')
 
-  const subkeys = await tryRegistryKeys('\\SOFTWARE\\GOG.com\\Games')
-  if (!subkeys.length) return { found: false, games }
+  // GOG can live in HKLM or HKCU, and in WOW6432Node on 64-bit Windows.
+  // Build a priority list of all combinations to try.
+  const regCandidates = [
+    { hive: Registry.HKLM, key: '\\SOFTWARE\\GOG.com\\Games' },
+    { hive: Registry.HKLM, key: '\\SOFTWARE\\WOW6432Node\\GOG.com\\Games' },
+    { hive: Registry.HKCU, key: '\\SOFTWARE\\GOG.com\\Games' },
+    { hive: Registry.HKCU, key: '\\SOFTWARE\\WOW6432Node\\GOG.com\\Games' },
+  ]
 
-  for (const subkey of subkeys) {
-    const values = await tryRegistryValues(subkey.key)
-    const gameId = values['gameID'] || values['GAMEID'] || subkey.key.split('\\').pop()
-    const name = values['GAMENAME'] || values['gameName'] || values['GameName']
-    const exePath = values['exe'] || values['EXE'] || values['Exe']
-    const installDir = values['PATH'] || values['path']
-    if (!name) continue
-    games.push({
-      id: generateId('gog', gameId),
-      title: name,
-      platform: 'GOG',
-      appId: String(gameId),
-      installDir: installDir || null,
-      sizeBytes: 0,
-      exePath: exePath || null,
-      launchUri: null, // GOG uses direct exe
-      coverArt: null,
-      ocScore: null,
-      ocTier: null,
-      ocRecommend: null,
-    })
+  const seenIds = new Set()
+
+  for (const { hive, key } of regCandidates) {
+    const subkeys = await tryRegistryKeys(hive, key)
+    for (const subkey of subkeys) {
+      const values = await tryRegistryValues(hive, subkey.key)
+      const gameId    = values['gameID'] || values['GAMEID'] || subkey.key.split('\\').pop()
+      const name      = values['GAMENAME'] || values['gameName'] || values['GameName']
+      const exePath   = values['exe']  || values['EXE']  || values['Exe']
+      const installDir = values['PATH'] || values['path'] || values['InstallPath']
+
+      if (!name || seenIds.has(String(gameId))) continue
+      seenIds.add(String(gameId))
+
+      games.push({
+        id: generateId('gog', gameId),
+        title: name,
+        platform: 'GOG',
+        appId: String(gameId),
+        installDir: installDir || null,
+        sizeBytes: 0,
+        // Prefer the GOG Galaxy URI scheme — works regardless of install path.
+        // Fall back to direct exe if URI scheme unavailable.
+        launchUri: `goggalaxy://rungameid/${gameId}`,
+        exePath: exePath || null,
+        coverArt: null, ocScore: null, ocTier: null, ocRecommend: null,
+      })
+    }
   }
 
   sendProgress(`GOG: found ${games.length} games`)
@@ -262,49 +261,42 @@ async function scanGog(sendProgress) {
 async function scanUbisoft(sendProgress) {
   sendProgress('Scanning Ubisoft Connect...')
   const games = []
+  const Registry = require('winreg')
 
-  const subkeys = await tryRegistryKeys('\\SOFTWARE\\Ubisoft\\Launcher\\Installs')
-  if (!subkeys.length) {
-    // Try 64-bit path
-    const subkeys64 = await tryRegistryKeys('\\SOFTWARE\\WOW6432Node\\Ubisoft\\Launcher\\Installs')
-    if (!subkeys64.length) return { found: false, games }
-    subkeys.push(...subkeys64)
-  }
+  const regCandidates = [
+    { hive: Registry.HKLM, key: '\\SOFTWARE\\Ubisoft\\Launcher\\Installs' },
+    { hive: Registry.HKLM, key: '\\SOFTWARE\\WOW6432Node\\Ubisoft\\Launcher\\Installs' },
+    { hive: Registry.HKCU, key: '\\SOFTWARE\\Ubisoft\\Launcher\\Installs' },
+  ]
 
-  for (const subkey of subkeys) {
-    const values = await tryRegistryValues(subkey.key)
-    const gameId = subkey.key.split('\\').pop()
-    const installDir = values['InstallDir'] || values['installdir']
-    if (!installDir) continue
+  const seenIds = new Set()
 
-    // Try to get the name from the install folder or a local manifest
-    let name = null
-    const nameCandidates = [
-      path.join(installDir, 'uplay_record.json'),
-    ]
-    for (const nc of nameCandidates) {
-      const content = safeRead(nc)
-      if (content) {
-        try { name = JSON.parse(content).name } catch (_) {}
-        if (name) break
-      }
+  for (const { hive, key } of regCandidates) {
+    const subkeys = await tryRegistryKeys(hive, key)
+    for (const subkey of subkeys) {
+      const values    = await tryRegistryValues(hive, subkey.key)
+      const gameId    = subkey.key.split('\\').pop()
+      const installDir = values['InstallDir'] || values['installdir']
+
+      if (!installDir || seenIds.has(gameId)) continue
+      seenIds.add(gameId)
+
+      let name = null
+      const content = safeRead(path.join(installDir, 'uplay_record.json'))
+      if (content) { try { name = JSON.parse(content).name } catch (_) {} }
+      if (!name) name = path.basename(installDir)
+
+      games.push({
+        id: generateId('ubisoft', gameId),
+        title: name,
+        platform: 'Ubisoft',
+        appId: String(gameId),
+        installDir,
+        sizeBytes: 0,
+        launchUri: `uplay://launch/${gameId}/0`,
+        coverArt: null, ocScore: null, ocTier: null, ocRecommend: null,
+      })
     }
-    // Fallback: use the folder name
-    if (!name) name = path.basename(installDir)
-
-    games.push({
-      id: generateId('ubisoft', gameId),
-      title: name,
-      platform: 'Ubisoft',
-      appId: String(gameId),
-      installDir: installDir || null,
-      sizeBytes: 0,
-      launchUri: `uplay://launch/${gameId}/0`,
-      coverArt: null,
-      ocScore: null,
-      ocTier: null,
-      ocRecommend: null,
-    })
   }
 
   sendProgress(`Ubisoft: found ${games.length} games`)
@@ -316,10 +308,11 @@ async function scanUbisoft(sendProgress) {
 async function scanEA(sendProgress) {
   sendProgress('Scanning EA App...')
   const games = []
+  const Registry = require('winreg')
 
   const manifestDirs = [
     path.join(process.env.PROGRAMDATA || 'C:\\ProgramData', 'EA Desktop', 'Manifests'),
-    path.join(process.env.PROGRAMDATA || 'C:\\ProgramData', 'Origin', 'Manifests'), // legacy
+    path.join(process.env.PROGRAMDATA || 'C:\\ProgramData', 'Origin', 'Manifests'),
   ]
 
   let found = false
@@ -331,39 +324,38 @@ async function scanEA(sendProgress) {
       const content = safeRead(path.join(manifestDir, file))
       if (!content) continue
       try {
-        // EA manifests are query-string encoded
-        const params = new URLSearchParams(content)
+        const params    = new URLSearchParams(content)
         const contentId = params.get('id') || params.get('contentid')
-        const name = params.get('ddiassetid') || params.get('contentid') || file.replace('.mfst', '')
+        const name      = params.get('ddiassetid') || params.get('contentid') || file.replace('.mfst', '')
         if (!contentId) continue
         games.push({
           id: generateId('ea', contentId),
-          title: name.replace(/@.*/, '').replace(/_/g, ' '), // clean up id-based name
+          title: name.replace(/@.*/, '').replace(/_/g, ' '),
           platform: 'EA',
           appId: contentId,
           installDir: params.get('dipinstallpath') || null,
           sizeBytes: 0,
           launchUri: `origin://launchgame/${contentId}`,
-          coverArt: null,
-          ocScore: null,
-          ocTier: null,
-          ocRecommend: null,
-          needsEnrichment: true, // EA names from manifests are often ugly, IGDB will clean up
+          coverArt: null, ocScore: null, ocTier: null, ocRecommend: null,
         })
       } catch (_) {}
     }
   }
 
-  // Also check registry for EA
+  // Registry fallback for EA
   if (!found) {
-    const regKeys = await tryRegistryKeys('\\SOFTWARE\\EA Games')
-    if (regKeys.length) {
+    for (const { hive, key } of [
+      { hive: Registry.HKLM, key: '\\SOFTWARE\\EA Games' },
+      { hive: Registry.HKLM, key: '\\SOFTWARE\\WOW6432Node\\EA Games' },
+    ]) {
+      const regKeys = await tryRegistryKeys(hive, key)
+      if (!regKeys.length) continue
       found = true
-      for (const key of regKeys) {
-        const values = await tryRegistryValues(key.key)
-        const name = key.key.split('\\').pop()
+      for (const rkey of regKeys) {
+        const values     = await tryRegistryValues(hive, rkey.key)
+        const name       = rkey.key.split('\\').pop()
         const installDir = values['Install Dir'] || values['InstallDir']
-        const contentId = values['ContentID'] || values['contentID'] || name
+        const contentId  = values['ContentID']   || values['contentID'] || name
         games.push({
           id: generateId('ea', contentId),
           title: name,
@@ -372,10 +364,7 @@ async function scanEA(sendProgress) {
           installDir: installDir || null,
           sizeBytes: 0,
           launchUri: `origin://launchgame/${contentId}`,
-          coverArt: null,
-          ocScore: null,
-          ocTier: null,
-          ocRecommend: null,
+          coverArt: null, ocScore: null, ocTier: null, ocRecommend: null,
         })
       }
     }
@@ -389,26 +378,22 @@ async function scanEA(sendProgress) {
 
 async function scanAll(sendProgress) {
   const allGames = []
-  const launchersFound = []
+  const launchersFound    = []
   const launchersNotFound = []
 
   const scanners = [
-    { name: 'Steam', fn: scanSteam },
-    { name: 'Epic', fn: scanEpic },
-    { name: 'GOG', fn: scanGog },
+    { name: 'Steam',   fn: scanSteam   },
+    { name: 'Epic',    fn: scanEpic    },
+    { name: 'GOG',     fn: scanGog     },
     { name: 'Ubisoft', fn: scanUbisoft },
-    { name: 'EA', fn: scanEA },
+    { name: 'EA',      fn: scanEA      },
   ]
 
   for (const { name, fn } of scanners) {
     try {
       const result = await fn(sendProgress)
-      if (result.found) {
-        launchersFound.push(name)
-        allGames.push(...result.games)
-      } else {
-        launchersNotFound.push(name)
-      }
+      if (result.found) { launchersFound.push(name);    allGames.push(...result.games) }
+      else              { launchersNotFound.push(name) }
     } catch (err) {
       launchersNotFound.push(name)
       sendProgress(`${name}: error – ${err.message}`)
@@ -419,11 +404,7 @@ async function scanAll(sendProgress) {
 
   return {
     games: allGames,
-    meta: {
-      lastScan: new Date().toISOString(),
-      launchersFound,
-      launchersNotFound,
-    },
+    meta: { lastScan: new Date().toISOString(), launchersFound, launchersNotFound },
   }
 }
 
