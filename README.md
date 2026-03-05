@@ -50,6 +50,7 @@ Click **⟳ SCAN LIBRARY** in the top bar. PeliVeli will:
 2. Download cover art for each game
 3. Fetch OpenCritic scores
 4. Cache everything locally — subsequent launches are instant
+5. For games with their own launchers, use the Add Game button to locate the game manually and its executable. 
 
 ---
 
