@@ -355,13 +355,42 @@ export default function SettingsDrawer({ settings, onSave, onClose, onReEnrich, 
               <Group label="Font Family" sec={sec}>
                 {loadingFonts
                   ? <div style={{ fontSize:lbl, color:sec, padding:'8px 0' }}>Loading system fonts…</div>
-                  : <select value={local.fontFamily} onChange={e=>setLocal(s=>({...s,fontFamily:e.target.value}))}
-                      style={{ width:'100%', background:'rgba(128,128,128,0.15)', border:'1px solid rgba(128,128,128,0.2)',
-                        borderRadius:8, padding:'8px 12px', fontSize:base, cursor:'pointer', color:pri, fontFamily:local.fontFamily }}>
-                      {fonts.map(f=><option key={f} value={f}>{f}</option>)}
-                    </select>
+                  : <>
+                      {/* Custom font picker — native <select> ignores background/color on Windows */}
+                      <div style={{ position:'relative' }}>
+                        <div style={{ width:'100%', background:'rgba(128,128,128,0.15)',
+                          border:'1px solid rgba(128,128,128,0.2)', borderRadius:8,
+                          padding:'8px 32px 8px 12px', fontSize:base, color:pri,
+                          fontFamily:local.fontFamily, cursor:'pointer', userSelect:'none',
+                          boxSizing:'border-box' }}
+                          onClick={()=>setLocal(s=>({...s, _fontOpen: !s._fontOpen }))}>
+                          {local.fontFamily || 'Calibri'}
+                          <span style={{ position:'absolute', right:10, top:'50%', transform:'translateY(-50%)',
+                            fontSize:10, opacity:0.6, pointerEvents:'none' }}>▼</span>
+                        </div>
+                        {local._fontOpen && (
+                          <div style={{ position:'absolute', top:'100%', left:0, right:0, zIndex:300,
+                            background: local.drawerBackground || '#161820',
+                            border:'1px solid rgba(128,128,128,0.3)', borderRadius:8,
+                            maxHeight:220, overflowY:'auto', marginTop:3,
+                            boxShadow:'0 8px 32px rgba(0,0,0,0.4)' }}>
+                            {fonts.map(f => (
+                              <div key={f} onClick={()=>setLocal(s=>({...s, fontFamily:f, _fontOpen:false }))}
+                                style={{ padding:'7px 12px', fontSize:lbl, fontFamily:f,
+                                  color: f===local.fontFamily ? '#4a80c0' : pri,
+                                  background: f===local.fontFamily ? 'rgba(74,128,192,0.15)' : 'transparent',
+                                  cursor:'pointer' }}
+                                onMouseEnter={e=>{ if(f!==local.fontFamily) e.currentTarget.style.background='rgba(128,128,128,0.15)' }}
+                                onMouseLeave={e=>{ if(f!==local.fontFamily) e.currentTarget.style.background='transparent' }}>
+                                {f}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </>
                 }
-                <div style={{ marginTop:8, padding:'8px 12px', background:'rgba(128,128,128,0.12)', borderRadius:8, fontSize:base, color:pri, fontFamily:font }}>
+                <div style={{ marginTop:8, padding:'8px 12px', background:'rgba(128,128,128,0.12)', borderRadius:8, fontSize:base, color:pri, fontFamily:local.fontFamily || font }}>
                   The quick brown fox jumps over the lazy dog
                 </div>
               </Group>

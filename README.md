@@ -8,7 +8,6 @@ Your unified game library. Scans Steam, Epic Games, GOG, Ubisoft Connect, and EA
 
 - **Node.js 18+** — download from [nodejs.org](https://nodejs.org)
 - **Windows 10 or 11** (the registry scanner is Windows-only)
-- A **Twitch Developer account** for IGDB cover art (free) — get one at [dev.twitch.tv](https://dev.twitch.tv)
 
 ---
 
@@ -41,7 +40,6 @@ On first launch you'll see the **setup screen** asking for your IGDB credentials
 3. Copy the API under Preferences
 4. Enter it in PeliVeli's first-run setup screen (or Settings → Account later)
 
-Steam and GOG cover art works without any API key.
 
 If you only have Steam and GOG games, you can tick **Skip IGDB** — cover art will still work for those two platforms without any key.
 
@@ -86,7 +84,7 @@ No data is sent anywhere except outbound requests to:
 Make sure the launcher is installed and you've run it at least once so it writes its manifest files. Ubisoft Connect in particular requires at least one game to be installed to create registry entries.
 
 **Cover art missing for Epic/Ubisoft/EA games:**
-Check your IGDB credentials in Settings (bottom of the sidebar). You can update them and re-scan.
+Check your IGDB credentials in Settings. You can update them and re-scan.
 
 **App won't start:**
 Make sure you're on Node 18+ (`node --version`) and have run `npm install`.

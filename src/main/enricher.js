@@ -87,8 +87,8 @@ async function sgdbCoverUrl(game, apiKey) {
       }
     }
     // Search by name
-    const search = await fetchJsonRaw(`https://www.steamgriddb.com/api/v2/search/autocomplete/${encodeURIComponent(game.title)}`, headers)
-    if (!search.success || !search.data || search.data.length === 0) { log(`SGDB: no search results for "${game.title}"`); return null }
+    const search = await fetchJsonRaw(`https://www.steamgriddb.com/api/v2/search/autocomplete/${encodeURIComponent(game.displayTitle || game.title)}`, headers)
+    if (!search.success || !search.data || search.data.length === 0) { log(`SGDB: no search results for "${game.displayTitle || game.title}"`); return null }
     const gameId = search.data[0].id
     await sleep(200)
     const grids = await fetchJsonRaw(`https://www.steamgriddb.com/api/v2/grids/game/${gameId}?dimensions=600x900`, headers)

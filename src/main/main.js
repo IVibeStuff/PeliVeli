@@ -214,11 +214,50 @@ function registerIpcHandlers() {
 
   ipcMain.handle('themes:getDir', () => themesDir)
 
+  ipcMain.handle('shell:openExternal', (_, url) => {
+    if (url && (url.startsWith('https://') || url.startsWith('http://'))) {
+      shell.openExternal(url)
+    }
+  })
+
   ipcMain.handle('games:launch', async (_, game) => {
     try {
       if (game.launchUri)  { await shell.openExternal(game.launchUri) }
       else if (game.exePath) { const { spawn } = require('child_process'); spawn(game.exePath, [], { detached: true, stdio: 'ignore' }).unref() }
       return { success: true }
     } catch (err) { return { success: false, error: err.message } }
+  })
+  ipcMain.handle('games:addManual', async () => {
+    const { canceled, filePaths } = await dialog.showOpenDialog(mainWindow, {
+      title: 'Select Game Executable',
+      filters: [{ name: 'Executable', extensions: ['exe'] }],
+      properties: ['openFile'],
+    })
+    if (canceled || !filePaths.length) return null
+    const exePath    = filePaths[0]
+    const rawName    = path.basename(exePath, '.exe')
+    const folderName = path.basename(path.dirname(exePath))
+    const title      = (folderName && folderName !== '.') ? folderName : rawName
+    const id         = 'other_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7)
+    const game = {
+      id, title, platform: 'Other',
+      appId: null, exePath, installDir: path.dirname(exePath),
+      sizeBytes: 0, launchUri: null,
+      coverArt: null, ocScore: null, ocTier: null, ocRecommend: null,
+      ocUrl: null, displayTitle: null, manual: true,
+    }
+    const games = db.getGames()
+    games.push(game)
+    db.setGames(games)
+    return game
+  })
+
+  ipcMain.handle('games:rename', async (_, { id, title }) => {
+    const games = db.getGames()
+    const idx   = games.findIndex(g => g.id === id)
+    if (idx < 0) return null
+    games[idx] = { ...games[idx], displayTitle: title.trim() || games[idx].title }
+    db.setGames(games)
+    return games[idx]
   })
 }

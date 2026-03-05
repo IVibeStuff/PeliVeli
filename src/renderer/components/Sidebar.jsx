@@ -2,9 +2,9 @@ import { useContext } from 'react'
 import { SettingsContext } from '../App.jsx'
 
 const PLATFORM_DEFAULTS = {
-  Steam:   '#1a9fff', Epic: '#a0a0a0', GOG: '#a855f7', Ubisoft: '#0070ff', EA: '#ff6b35',
+  Steam:   '#1a9fff', Epic: '#a0a0a0', GOG: '#a855f7', Ubisoft: '#0070ff', EA: '#ff6b35', Other: '#8888aa',
 }
-const PLATFORM_ICONS = { Steam: '🎮', Epic: '🛡', GOG: '🌌', Ubisoft: '🔷', EA: '🟠', All: '◈' }
+const PLATFORM_ICONS = { Steam: '🎮', Epic: '🛡', GOG: '🌌', Ubisoft: '🔷', EA: '🟠', Other: '📦', All: '◈' }
 
 function isLight(hex) {
   try {

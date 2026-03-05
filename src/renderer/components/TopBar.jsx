@@ -11,7 +11,7 @@ function isLight(hex) {
   } catch(_) { return false }
 }
 
-export default function TopBar({ search, onSearch, sortBy, onSort, onScan, scanning, gameCount, totalCount, onOpenSettings }) {
+export default function TopBar({ search, onSearch, sortBy, onSort, onScan, onAddGame, scanning, gameCount, totalCount, onOpenSettings }) {
   const s    = useContext(SettingsContext)
   const font  = s.fontFamily  || 'Calibri, Segoe UI, sans-serif'
   const lbl   = s.fontSizeLabel || 11
@@ -92,8 +92,22 @@ export default function TopBar({ search, onSearch, sortBy, onSort, onScan, scann
         >⚙</button>
       </div>
 
-      {/* Scan button */}
-      <div className="titlebar-no-drag" style={{ marginRight: 140 }}>
+      {/* Add Game + Scan buttons */}
+      <div className="titlebar-no-drag" style={{ marginRight: 140, display: 'flex', gap: 7 }}>
+        <button onClick={onAddGame} disabled={scanning} style={{
+          padding: '7px 14px',
+          background: 'transparent',
+          border: `1px solid ${scanning ? sortInactiveBdr : sortActiveBdr}`,
+          borderRadius: 8, cursor: scanning ? 'default' : 'pointer',
+          color: scanning ? sec : sec,
+          fontFamily: "'Bebas Neue', cursive", fontSize: 15, letterSpacing: '0.1em',
+          transition: 'all 0.2s',
+        }}
+          onMouseEnter={e => { if (!scanning) { e.currentTarget.style.background = sortActiveBg; e.currentTarget.style.color = pri } }}
+          onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = sec }}
+        >
+          + ADD GAME
+        </button>
         <button onClick={onScan} disabled={scanning} style={{
           padding: '7px 18px',
           background: scanning ? '#141620' : 'linear-gradient(135deg,#1e3a6e,#2e5fae)',

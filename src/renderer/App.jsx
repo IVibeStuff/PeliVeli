@@ -126,6 +126,22 @@ export default function App() {
     }
   }
 
+  async function handleAddGame() {
+    const game = await window.peliVeli.addManualGame()
+    if (game) {
+      setGames(gs => [...gs, game])
+      setSelectedGame(game)
+    }
+  }
+
+  async function handleRenameGame(gameId, title) {
+    const updated = await window.peliVeli.renameGame(gameId, title)
+    if (updated) {
+      setGames(gs => gs.map(g => g.id === gameId ? { ...g, ...updated } : g))
+      setSelectedGame(g => g?.id === gameId ? { ...g, ...updated } : g)
+    }
+  }
+
   async function handleHideGame(game) {
     const updated = await window.peliVeli.hideGame(game.id)
     setHiddenIds(new Set(updated))
@@ -183,7 +199,7 @@ export default function App() {
         <TopBar
           search={search} onSearch={setSearch}
           sortBy={sortBy} onSort={(key) => setSortBy(prev => ({ key, dir: prev.key === key && prev.dir === 'asc' ? 'desc' : 'asc' }))}
-          onScan={handleScan} scanning={status.active}
+          onScan={handleScan} onAddGame={handleAddGame} scanning={status.active}
           gameCount={filteredGames.length} totalCount={visibleGames.length}
           onOpenSettings={() => setShowSettings(true)}
         />
@@ -202,7 +218,7 @@ export default function App() {
               onClose={() => setSelectedGame(null)}
               onLaunch={g => window.peliVeli.launchGame(g)}
               onHide={handleHideGame} onUnhide={handleUnhideGame}
-              onSetOc={handleSetOc} onRefresh={handleRefreshOne}
+              onSetOc={handleSetOc} onRefresh={handleRefreshOne} onRename={handleRenameGame}
             />
           )}
         </div>
