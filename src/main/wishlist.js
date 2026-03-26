@@ -82,6 +82,10 @@ async function fetchPrices(itadGameId, country, apiKey) {
   if (!apiKey) return { offers: [], error: 'No IsThereAnyDeal API key — add one in Settings → Account' }
   if (!itadGameId) return { offers: [], error: 'No game ID stored — remove and re-add this wishlist entry' }
 
+  // ITAD uses UUIDs — if the stored ID is a legacy AllKeyShop numeric ID, tell the user to re-add
+  const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(itadGameId)
+  if (!isUuid) return { offers: [], error: 'This entry was added before v1.2.0 — please remove and re-add it to fetch prices' }
+
   try {
     // country default: EE (Estonia, EUR)
     const cc = (country || 'EE').toUpperCase()
