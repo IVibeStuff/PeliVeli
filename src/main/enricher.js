@@ -16,10 +16,21 @@ function log(msg) {
   try { fs.appendFileSync(LOG_FILE, line) } catch (_) {}
 }
 
-const BROWSER_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
+const BROWSER_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36'
 const OC_HEADERS = {
-  'User-Agent': BROWSER_UA, 'Accept': 'application/json, text/plain, */*',
-  'Accept-Language': 'en-US,en;q=0.9', 'Origin': 'https://opencritic.com', 'Referer': 'https://opencritic.com/',
+  'User-Agent':      BROWSER_UA,
+  'Accept':          'application/json, text/plain, */*',
+  'Accept-Language': 'en-US,en;q=0.9',
+  'Accept-Encoding': 'gzip, deflate, br',
+  'Origin':          'https://opencritic.com',
+  'Referer':         'https://opencritic.com/',
+  'sec-ch-ua':       '"Chromium";v="134", "Google Chrome";v="134", "Not-A.Brand";v="99"',
+  'sec-ch-ua-mobile':   '?0',
+  'sec-ch-ua-platform': '"Windows"',
+  'sec-fetch-dest':  'empty',
+  'sec-fetch-mode':  'cors',
+  'sec-fetch-site':  'same-site',
+  'Connection':      'keep-alive',
 }
 function sgdbHeaders(apiKey) {
   return { 'Authorization': `Bearer ${apiKey}`, 'Accept': 'application/json', 'User-Agent': BROWSER_UA }
@@ -34,12 +45,33 @@ function fetchJsonRaw(url, headers) {
         return fetchJsonRaw(res.headers.location, headers).then(resolve).catch(reject)
       }
       if (res.statusCode === 429) return reject(new Error('rate_limited'))
+      if (res.statusCode === 403) return reject(new Error('HTTP 403 forbidden'))
       if (res.statusCode < 200 || res.statusCode >= 300) return reject(new Error(`HTTP ${res.statusCode}`))
+
+      // Handle gzip/deflate compression
+      let stream = res
+      const encoding = res.headers['content-encoding']
+      if (encoding === 'gzip' || encoding === 'deflate' || encoding === 'br') {
+        const zlib = require('zlib')
+        const decomp = encoding === 'br' ? zlib.createBrotliDecompress()
+                     : encoding === 'gzip' ? zlib.createGunzip()
+                     : zlib.createInflate()
+        res.pipe(decomp)
+        stream = decomp
+      }
+
       let data = ''
-      res.on('data', chunk => { data += chunk })
-      res.on('end', () => {
-        try { resolve(JSON.parse(data)) } catch (_) { reject(new Error('invalid json')) }
+      stream.on('data', chunk => { data += chunk })
+      stream.on('end', () => {
+        try {
+          resolve(JSON.parse(data))
+        } catch (_) {
+          // Log the first 200 chars so we can see what came back (challenge page, error HTML, etc)
+          log(`fetchJsonRaw: invalid JSON from ${url.slice(0,80)} — response starts: ${data.slice(0,200)}`)
+          reject(new Error('invalid json'))
+        }
       })
+      stream.on('error', reject)
     })
     req.on('error', reject)
     req.setTimeout(15000, () => { req.destroy(); reject(new Error('timeout')) })
@@ -70,7 +102,7 @@ function fileIsValid(p) {
 function cleanFile(p) { try { if (p && fs.existsSync(p)) fs.unlinkSync(p) } catch (_) {} }
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)) }
 
-const OC_TIER_MAP = { 'Mighty': 'Mighty', 'Strong': 'Strong', 'Fair': 'Fair', 'Weak': 'Weak' }
+const OC_TIER_MAP = {} // kept for migration compatibility — no longer used
 
 // ─── SteamGridDB cover art ──────────────────────────────────────────────────
 
@@ -158,99 +190,69 @@ async function getCoverArt(game, config) {
   return null
 }
 
-// ─── OpenCritic ─────────────────────────────────────────────────────────────
+// ─── Fetch cover art by explicit SGDB game ID ────────────────────────────────
+// Used when the user pastes a steamgriddb.com/game/XXXXX URL manually
 
-function cleanTitle(title) {
-  return title
-    .replace(/[™®©]/g, '')
-    .replace(/\s*[-–:]\s*(Complete Edition|Game of the Year|GOTY|Definitive Edition|Enhanced Edition|Remastered|Gold Edition|Deluxe Edition|Standard Edition|Ultimate Edition|Anniversary Edition).*$/i, '')
-    .replace(/\s+/g, ' ').trim()
-}
-
-function titleSimilarity(a, b) {
-  const na = cleanTitle(a).toLowerCase(), nb = cleanTitle(b).toLowerCase()
-  if (na === nb) return 1
-  if (na.includes(nb) || nb.includes(na)) return 0.85
-  const wa = new Set(na.split(/\s+/)), wb = new Set(nb.split(/\s+/))
-  const inter = [...wa].filter(w => wb.has(w)).length
-  return inter / Math.max(wa.size, wb.size)
-}
-
-async function getOpenCriticScore(title) {
-  const clean = cleanTitle(title)
-  for (let attempt = 0; attempt < 3; attempt++) {
-    try {
-      if (attempt > 0) await sleep(attempt * 1500)
-      const results = await fetchJsonRaw(
-        `https://api.opencritic.com/api/game/search?criteria=${encodeURIComponent(clean)}`,
-        OC_HEADERS
-      )
-      if (!Array.isArray(results) || results.length === 0) { log(`OC: no results for "${clean}"`); return null }
-      let best = null, bestSim = 0
-      for (const r of results.slice(0, 10)) {
-        const sim = titleSimilarity(clean, r.name || '')
-        if (sim > bestSim) { bestSim = sim; best = r }
-      }
-      log(`OC best match for "${clean}": "${best?.name}" sim=${bestSim.toFixed(2)}`)
-      if (!best || bestSim < 0.25) return null
-      await sleep(400)
-      const detail = await fetchJsonRaw(`https://api.opencritic.com/api/game/${best.id}`, OC_HEADERS)
-      if (!detail) continue
-      const tier      = detail.tier ? (OC_TIER_MAP[detail.tier] || null) : null
-      const score     = typeof detail.topCriticScore === 'number' && detail.topCriticScore >= 0 ? Math.round(detail.topCriticScore) : null
-      const recommend = typeof detail.percentRecommended === 'number' ? Math.round(detail.percentRecommended) : null
-      if (!tier && score === null) return null
-      log(`OC result for "${title}": tier=${tier} score=${score}`)
-      return { score, tier, recommend, url: `https://opencritic.com/game/${detail.id}` }
-    } catch (err) {
-      log(`OC error [${attempt + 1}] "${title}": ${err.message}`)
-      if (err.message === 'rate_limited') await sleep(5000)
-    }
-  }
-  return null
-}
-
-async function fetchOcById(gameId) {
+async function getCoverArtBySgdbId(game, sgdbGameId, config) {
+  ensureCacheDir()
+  if (!config.sgdbApiKey) return null
+  const headers  = sgdbHeaders(config.sgdbApiKey)
+  const safeTitle = (game.displayTitle || game.title).replace(/[^a-z0-9]/gi, '_').toLowerCase().slice(0, 60)
+  const filename  = `${game.platform.toLowerCase()}_${safeTitle}_${game.appId || 'x'}.jpg`
+  const destPath  = path.join(CACHE_DIR, filename)
+  cleanFile(destPath) // always re-fetch when manually specified
   try {
-    const detail = await fetchJsonRaw(`https://api.opencritic.com/api/game/${gameId}`, OC_HEADERS)
-    if (!detail) return null
-    const tier      = detail.tier ? (OC_TIER_MAP[detail.tier] || null) : null
-    const score     = typeof detail.topCriticScore === 'number' && detail.topCriticScore >= 0 ? Math.round(detail.topCriticScore) : null
-    const recommend = typeof detail.percentRecommended === 'number' ? Math.round(detail.percentRecommended) : null
-    const slug      = (detail.url || '').split('/').filter(Boolean).pop() || String(gameId)
-    return { ocScore: score, ocTier: tier, ocRecommend: recommend, ocUrl: `https://opencritic.com/game/${detail.id}/${slug}`, name: detail.name }
+    const grids = await fetchJsonRaw(
+      `https://www.steamgriddb.com/api/v2/grids/game/${sgdbGameId}?dimensions=600x900`,
+      headers
+    )
+    if (!grids.success || !grids.data || grids.data.length === 0) {
+      log(`SGDB manual: no grids for game ID ${sgdbGameId}`)
+      return null
+    }
+    // Also grab the game name for display
+    const gameInfo = await fetchJsonRaw(
+      `https://www.steamgriddb.com/api/v2/games/${sgdbGameId}`,
+      headers
+    ).catch(() => null)
+    const sgdbName = gameInfo?.data?.name || null
+    await downloadFile(grids.data[0].url, destPath)
+    if (fileIsValid(destPath)) {
+      log(`SGDB manual: cover OK for "${game.title}" via game ID ${sgdbGameId}`)
+      return { coverPath: destPath, sgdbName }
+    }
+    cleanFile(destPath)
+    return null
   } catch (err) {
-    log(`fetchOcById(${gameId}): ${err.message}`)
+    log(`SGDB manual error for "${game.title}" ID ${sgdbGameId}: ${err.message}`)
     return null
   }
 }
+
+// ─── OpenCritic ─────────────────────────────────────────────────────────────
+// OC search now requires an API key (post-Valnet acquisition). These stubs are
+// kept so existing stored ocUrl/ocScore data is not lost on re-enrich, but no
+// new OC lookups are made.
+
+async function getOpenCriticScore() { return null }
+async function fetchOcById()        { return null }
+
+// ─── Main enrichment loop ───────────────────────────────────────────────────
 
 // ─── Main enrichment loop ───────────────────────────────────────────────────
 
 async function enrichAll(games, config, sendProgress) {
   try { fs.writeFileSync(LOG_FILE, `=== Enrichment run ${new Date().toISOString()} ===\n`) } catch (_) {}
-  if (!config.sgdbApiKey) log('NOTE: No SteamGridDB API key — Epic/Ubisoft/EA cover art will be skipped')
+  if (!config.sgdbApiKey) log('NOTE: No SteamGridDB API key — cover art for non-Steam games will be skipped')
 
   const enriched = []
   for (let i = 0; i < games.length; i++) {
     const game = { ...games[i] }
-    sendProgress(`Enriching ${i + 1}/${games.length}: ${game.title}`)
+    sendProgress(`Enriching ${i + 1}/${games.length}: ${game.displayTitle || game.title}`)
 
     if (!fileIsValid(game.coverArt)) {
       game.coverArt = null
       try { game.coverArt = await getCoverArt(game, config) } catch (err) { log(`Cover exception "${game.title}": ${err.message}`) }
-    }
-
-    if (game.ocScore == null) {
-      try {
-        const titleForOc = game.displayTitle || game.title
-        const oc = await getOpenCriticScore(titleForOc)
-        if (oc) {
-          game.ocScore = oc.score; game.ocTier = oc.tier; game.ocRecommend = oc.recommend
-          if (!game.ocUrl) game.ocUrl = oc.url
-        }
-      } catch (err) { log(`OC exception "${game.title}": ${err.message}`) }
-      await sleep(300)
     }
 
     enriched.push(game)
@@ -260,4 +262,4 @@ async function enrichAll(games, config, sendProgress) {
   return enriched
 }
 
-module.exports = { enrichAll, fetchOcById, fetchCoverArt: getCoverArt, fetchOcByTitle: getOpenCriticScore }
+module.exports = { enrichAll, fetchCoverArt: getCoverArt, fetchCoverArtBySgdbId: getCoverArtBySgdbId }

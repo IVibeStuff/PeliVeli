@@ -10,14 +10,14 @@ function isLight(hex) {
   } catch(_) { return false }
 }
 
-export default function DetailPanel({ game, isHidden, onClose, onLaunch, onHide, onUnhide, onSetOc, onRefresh, onRename }) {
-  const [launching, setLaunching]   = useState(false)
-  const [imgErr, setImgErr]         = useState(false)
-  const [ocUrl, setOcUrl]           = useState('')
-  const [ocFetching, setOcFetching] = useState(false)
-  const [ocError, setOcError]       = useState('')
-  const [ocSuccess, setOcSuccess]   = useState('')
-  const [refreshing, setRefreshing] = useState(false)
+export default function DetailPanel({ game, isHidden, onClose, onLaunch, onHide, onUnhide, onSetSgdb, onRefresh, onRename }) {
+  const [launching, setLaunching]       = useState(false)
+  const [imgErr, setImgErr]             = useState(false)
+  const [sgdbUrl, setSgdbUrl]           = useState('')
+  const [sgdbFetching, setSgdbFetching] = useState(false)
+  const [sgdbError, setSgdbError]       = useState('')
+  const [sgdbSuccess, setSgdbSuccess]   = useState('')
+  const [refreshing, setRefreshing]     = useState(false)
   const [editingTitle, setEditingTitle] = useState(false)
   const [titleDraft, setTitleDraft]     = useState('')
   const s = useContext(SettingsContext)
@@ -59,31 +59,28 @@ export default function DetailPanel({ game, isHidden, onClose, onLaunch, onHide,
     setTimeout(() => setLaunching(false), 2000)
   }
 
-  async function handleFetchByUrl() {
-    const raw = ocUrl.trim()
+  async function handleFetchBySgdb() {
+    const raw = sgdbUrl.trim()
     if (!raw) return
-    const m = raw.match(/opencritic\.com\/game\/(\d+)|^(\d+)$/)
-    if (!m) { setOcError('Paste a full OpenCritic URL or just the numeric game ID'); return }
-    const id = m[1] || m[2]
-    setOcFetching(true); setOcError(''); setOcSuccess('')
+    const m = raw.match(/steamgriddb\.com\/game\/(\d+)|^(\d+)$/)
+    if (!m) { setSgdbError('Paste a SteamGridDB game URL or just the numeric ID'); return }
+    const sgdbGameId = m[1] || m[2]
+    setSgdbFetching(true); setSgdbError(''); setSgdbSuccess('')
     try {
-      const data = await window.peliVeli.fetchOcById(id)
-      if (!data) { setOcError('No data returned — check the URL is correct'); return }
-      setOcSuccess(`Matched: ${data.name || 'Unknown'}${!game.coverArt ? ' · Fetching cover art…' : ''}`)
-      await onSetOc(game.id, { ocScore: data.ocScore, ocTier: data.ocTier, ocRecommend: data.ocRecommend,
-        ocUrl: data.ocUrl, canonicalName: data.name })
-      setOcUrl('')
-      setTimeout(() => setOcSuccess(''), 4000)
+      const result = await onSetSgdb(game.id, sgdbGameId)
+      if (result?.error) { setSgdbError(result.error); return }
+      setSgdbSuccess(`Cover art updated${result?.displayTitle ? ` · "${result.displayTitle}"` : ''}`)
+      setSgdbUrl('')
+      setTimeout(() => setSgdbSuccess(''), 4000)
     } catch (err) {
-      setOcError('Network error — check your connection')
+      setSgdbError('Network error — check your connection')
     } finally {
-      setOcFetching(false)
+      setSgdbFetching(false)
     }
   }
 
   async function handleRefresh() {
     setRefreshing(true)
-    setOcSuccess(''); setOcError('')
     await onRefresh(game.id)
     setRefreshing(false)
   }
@@ -243,60 +240,55 @@ export default function DetailPanel({ game, isHidden, onClose, onLaunch, onHide,
             </button>
           </div>
 
-          {/* OpenCritic */}
-          <Section title="OpenCritic" sec={sec}>
-            {game.ocTier ? (
-              <div style={{ display:'flex', alignItems:'center', gap:12, marginBottom:12 }}>
-                <div style={{ width:52, height:52, borderRadius:'50%', background:tierColor(game.ocTier),
-                  display:'flex', alignItems:'center', justifyContent:'center',
-                  boxShadow:`0 0 16px ${tierColor(game.ocTier)}66` }}>
-                  <span style={{ fontSize:fontSizeBase, fontWeight:800, color:'#fff' }}>{game.ocScore ?? '?'}</span>
-                </div>
-                <div>
-                  <div style={{ fontSize:fontSizeBase, fontWeight:700, color:tierColor(game.ocTier) }}>{game.ocTier}</div>
-                  {game.ocRecommend != null && (
-                    <div style={{ fontSize:fontSizeLabel, color:sec }}>{game.ocRecommend}% recommended</div>
-                  )}
-                  {game.ocUrl && (
-                    <a href="#" onClick={e => { e.preventDefault(); window.peliVeli.openExternal(game.ocUrl) }}
-                      style={{ fontSize:fontSizeLabel, color:'#4a80c0', textDecoration:'none' }}>
-                      View on OpenCritic ↗
-                    </a>
-                  )}
-                </div>
-              </div>
-            ) : (
-              <div style={{ fontSize:fontSizeLabel, color:sec, marginBottom:10 }}>No score found automatically.</div>
-            )}
-
-            <div style={{ marginTop:10 }}>
-              <div style={{ fontSize:fontSizeLabel, color:sec, marginBottom:6, opacity:0.7 }}>
-                {game.ocTier ? 'Change OpenCritic link:' : 'Link to OpenCritic manually:'}
+          {/* Cover Art — manual SGDB link */}
+          {!game.coverArt && (
+            <Section title="Cover Art" sec={sec}>
+              <div style={{ fontSize:fontSizeLabel, color:sec, marginBottom:10, lineHeight:1.5 }}>
+                No cover art found automatically. Paste a SteamGridDB game URL to fetch it manually.
               </div>
               <div style={{ display:'flex', gap:6 }}>
-                <input value={ocUrl} onChange={e=>setOcUrl(e.target.value)}
-                  onKeyDown={e => e.key === 'Enter' && handleFetchByUrl()}
-                  placeholder="opencritic.com/game/12345/..."
+                <input value={sgdbUrl} onChange={e=>setSgdbUrl(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && handleFetchBySgdb()}
+                  placeholder="steamgriddb.com/game/12345"
                   style={{ flex:1, background:inputBg, border:`1px solid ${inputBdr}`,
                     borderRadius:7, padding:'6px 10px', color:pri, fontSize:fontSizeLabel,
                     fontFamily:font, outline:'none' }} />
-                <button onClick={handleFetchByUrl} disabled={ocFetching} style={{
+                <button onClick={handleFetchBySgdb} disabled={sgdbFetching} style={{
                   padding:'6px 10px', background:fetchBg, border:`1px solid ${fetchBdr}`,
-                  borderRadius:7, color:ocFetching ? sec : fetchColor, fontSize:fontSizeLabel,
-                  cursor:ocFetching ? 'default' : 'pointer', whiteSpace:'nowrap' }}>
-                  {ocFetching ? '…' : '↓ Fetch'}
+                  borderRadius:7, color:sgdbFetching ? sec : fetchColor, fontSize:fontSizeLabel,
+                  cursor:sgdbFetching ? 'default' : 'pointer', whiteSpace:'nowrap' }}>
+                  {sgdbFetching ? '…' : '↓ Fetch'}
                 </button>
               </div>
-              {ocError && <div style={{ fontSize:fontSizeLabel, color:'#e05050', marginTop:5 }}>{ocError}</div>}
-              {ocSuccess && (
-                <div style={{ marginTop:5 }}>
-                  <div style={{ fontSize:fontSizeLabel, color:'#50c878' }}>{ocSuccess}</div>
-                  {game.ocUrl && <div style={{ fontSize:fontSizeLabel-1, color:sec, marginTop:3,
-                    wordBreak:'break-all', userSelect:'text', fontFamily:'Consolas,monospace' }}>{game.ocUrl}</div>}
-                </div>
-              )}
-            </div>
-          </Section>
+              {sgdbError && <div style={{ fontSize:fontSizeLabel, color:'#e05050', marginTop:5 }}>{sgdbError}</div>}
+              {sgdbSuccess && <div style={{ fontSize:fontSizeLabel, color:'#50c878', marginTop:5 }}>{sgdbSuccess}</div>}
+            </Section>
+          )}
+
+          {/* Cover art re-link when art exists */}
+          {game.coverArt && (
+            <Section title="Cover Art" sec={sec}>
+              <div style={{ fontSize:fontSizeLabel, color:sec, marginBottom:8, opacity:0.7 }}>
+                Re-link cover art via SteamGridDB:
+              </div>
+              <div style={{ display:'flex', gap:6 }}>
+                <input value={sgdbUrl} onChange={e=>setSgdbUrl(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && handleFetchBySgdb()}
+                  placeholder="steamgriddb.com/game/12345"
+                  style={{ flex:1, background:inputBg, border:`1px solid ${inputBdr}`,
+                    borderRadius:7, padding:'6px 10px', color:pri, fontSize:fontSizeLabel,
+                    fontFamily:font, outline:'none' }} />
+                <button onClick={handleFetchBySgdb} disabled={sgdbFetching} style={{
+                  padding:'6px 10px', background:fetchBg, border:`1px solid ${fetchBdr}`,
+                  borderRadius:7, color:sgdbFetching ? sec : fetchColor, fontSize:fontSizeLabel,
+                  cursor:sgdbFetching ? 'default' : 'pointer', whiteSpace:'nowrap' }}>
+                  {sgdbFetching ? '…' : '↓ Fetch'}
+                </button>
+              </div>
+              {sgdbError && <div style={{ fontSize:fontSizeLabel, color:'#e05050', marginTop:5 }}>{sgdbError}</div>}
+              {sgdbSuccess && <div style={{ fontSize:fontSizeLabel, color:'#50c878', marginTop:5 }}>{sgdbSuccess}</div>}
+            </Section>
+          )}
 
           {/* Details */}
           <Section title="Details" sec={sec}>
@@ -358,9 +350,3 @@ function formatSize(bytes) {
   return `${(bytes / 1e3).toFixed(0)} KB`
 }
 
-function tierColor(tier) {
-  if (tier === 'Mighty') return '#00c896'
-  if (tier === 'Strong') return '#4a90e2'
-  if (tier === 'Fair')   return '#f0a020'
-  return '#e05050'
-}

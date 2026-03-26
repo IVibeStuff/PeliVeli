@@ -17,9 +17,9 @@ contextBridge.exposeInMainWorld('peliVeli', {
   unhideGame:     (id)     => ipcRenderer.invoke('hidden:unhide', id),
   getDebugLogPath:()       => ipcRenderer.invoke('debug:logPath'),
   setTitlebarTheme:(opts)  => ipcRenderer.invoke('titlebar:setTheme', opts),
-  fetchOcById:    (gameId) => ipcRenderer.invoke('oc:fetchById', gameId),
-  setGameOc:      (data)   => ipcRenderer.invoke('games:setOc', data),
+  fetchOcById:    (gameId) => ipcRenderer.invoke('oc:fetchById', gameId), // kept for compat
   refreshOneGame: (gameId) => ipcRenderer.invoke('games:refreshOne', gameId),
+  setSgdb:        (id, sgdbGameId) => ipcRenderer.invoke('games:setSgdb', { id, sgdbGameId }),
   getCustomThemes:  ()        => ipcRenderer.invoke('themes:getCustom'),
   installTheme:     ()        => ipcRenderer.invoke('themes:install'),
   deleteTheme:      (fname)   => ipcRenderer.invoke('themes:delete', fname),
@@ -30,4 +30,10 @@ contextBridge.exposeInMainWorld('peliVeli', {
   openExternal:     (url) => ipcRenderer.invoke('shell:openExternal', url),
   addManualGame:    ()        => ipcRenderer.invoke('games:addManual'),
   renameGame:       (id, title) => ipcRenderer.invoke('games:rename', { id, title }),
+  getWishlist:      ()           => ipcRenderer.invoke('wishlist:get'),
+  addToWishlist:    (item)       => ipcRenderer.invoke('wishlist:add', item),
+  removeFromWishlist:(id)        => ipcRenderer.invoke('wishlist:remove', id),
+  findWishlistGames:(query)      => ipcRenderer.invoke('wishlist:find', query),
+  fetchWishlistPrices:(itadId, country) => ipcRenderer.invoke('wishlist:prices', { itadId, country }),
+  onWishlistEnriched: (cb) => { ipcRenderer.on('wishlist:enriched', (_, w) => cb(w)); return () => ipcRenderer.removeAllListeners('wishlist:enriched') },
 })

@@ -1,6 +1,8 @@
 # PeliVeli 🎮
 
-Your unified game library. Scans Steam, Epic Games, GOG, Ubisoft Connect, and EA App — with cover art and OpenCritic scores.
+**Version 1.2.0**
+
+Your unified game library. Scans Steam, Epic Games, GOG, Ubisoft Connect, and EA App — with cover art fetched automatically and wishlist price tracking via IsThereAnyDeal.
 
 ---
 
@@ -8,6 +10,10 @@ Your unified game library. Scans Steam, Epic Games, GOG, Ubisoft Connect, and EA
 
 - **Node.js 18+** — download from [nodejs.org](https://nodejs.org)
 - **Windows 10 or 11** (the registry scanner is Windows-only)
+- A free **SteamGridDB API key** for cover art — get one at [steamgriddb.com](https://www.steamgriddb.com/profile/preferences/api)
+- A free **IsThereAnyDeal API key** for wishlist pricing — get one at [isthereanydeal.com/apps/my/](https://isthereanydeal.com/apps/my/)
+
+The SteamGridDB key is required for cover art on Epic, Ubisoft, EA, and GOG games. Steam games will get cover art automatically without any key. Both keys are free with no meaningful rate limits for personal use.
 
 ---
 
@@ -31,26 +37,29 @@ This starts the Vite dev server and Electron simultaneously. The app window will
 
 ### 3. First-run setup
 
-On first launch you'll see the **setup screen** asking for your IGDB credentials.
+On first launch you will see the setup screen asking for your **SteamGridDB API key**.
 
-## SteamGridDB Setup (optional — for Epic, Ubisoft, EA cover art)
+To get your key:
+1. Create a free account at [steamgriddb.com](https://www.steamgriddb.com)
+2. Go to **Preferences → API**
+3. Copy the key and paste it into PeliVeli's setup screen
 
-1. Go to [https://www.steamgriddb.com](https://www.steamgriddb.com)
-2. Log in with your Steam account
-3. Copy the API under Preferences
-4. Enter it in PeliVeli's first-run setup screen (or Settings → Account later)
+You can skip this step if you only have Steam games — cover art for Steam will still work. You can add or update the key at any time from **Settings → Account**.
 
+### 4. Add your IsThereAnyDeal key (for Wishlist pricing)
 
-If you only have Steam and GOG games, you can tick **Skip IGDB** — cover art will still work for those two platforms without any key.
+1. Register a free app at [isthereanydeal.com/apps/my/](https://isthereanydeal.com/apps/my/)
+2. Copy the generated API key
+3. In PeliVeli, open **Settings → Account → Update IsThereAnyDeal Key**
+4. Paste the key and click Save
 
-### 4. Scan your library
+Without this key the Wishlist tab will still work for organising games, but price lookups will show an error message.
 
-Click **⟳ SCAN LIBRARY** in the top bar. PeliVeli will:
-1. Detect installed launchers and find all games
-2. Download cover art for each game
-3. Fetch OpenCritic scores
-4. Cache everything locally — subsequent launches are instant
-5. For games with their own launchers, use the Add Game button to locate the game manually and its executable. 
+### 5. Scan your library
+
+Click **⟳ SCAN LIBRARY** in the top bar. PeliVeli will detect your installed launchers, find all games, and download cover art for each one. Everything is cached locally — subsequent launches are instant.
+
+If cover art is missing for a specific game after scanning, open the game's Detail Panel and paste a URL from [steamgriddb.com](https://www.steamgriddb.com) (e.g. `steamgriddb.com/game/12345`) into the Cover Art input to fetch it manually.
 
 ---
 
@@ -67,25 +76,31 @@ This produces a Windows installer in the `release/` folder.
 ## Data & privacy
 
 All data stays on your machine. PeliVeli stores:
+
 - `%APPDATA%\PeliVeli\games.json` — your scanned game list
-- `%APPDATA%\PeliVeli\config.json` — your IGDB credentials
+- `%APPDATA%\PeliVeli\wishlist.json` — your wishlist
+- `%APPDATA%\PeliVeli\config.json` — your API keys
+- `%APPDATA%\PeliVeli\settings.json` — your theme and UI preferences
 - `%APPDATA%\PeliVeli\covers\` — cached cover art images
 
 No data is sent anywhere except outbound requests to:
-- Steam CDN (cover art)
-- GOG API (cover art)
-- IGDB / Twitch API (cover art for Epic, Ubisoft, EA)
-- OpenCritic API (scores)
+
+- **Steam CDN** — cover art for Steam games
+- **SteamGridDB API** — cover art for Epic, Ubisoft, EA, and GOG games
+- **IsThereAnyDeal API** — wishlist price lookups and game search
 
 ---
 
 ## Troubleshooting
 
 **Games not found for a launcher:**
-Make sure the launcher is installed and you've run it at least once so it writes its manifest files. Ubisoft Connect in particular requires at least one game to be installed to create registry entries.
+Make sure the launcher is installed and you have run it at least once so it writes its manifest files. Ubisoft Connect in particular requires at least one game to be installed to create registry entries.
 
-**Cover art missing for Epic/Ubisoft/EA games:**
-Check your IGDB credentials in Settings. You can update them and re-scan.
+**Cover art missing after scan:**
+Check your SteamGridDB API key in **Settings → Account**. If the key is valid but a specific game still has no art, paste the game's SteamGridDB URL into the Cover Art field in its Detail Panel.
+
+**Wishlist prices not loading:**
+Make sure you have added your IsThereAnyDeal API key in **Settings → Account**. If the key is set but prices still fail, check the country setting in **Settings → Wishlist** — it should match your region for correct currency display. Wishlist entries added before version 1.2.0 may need to be removed and re-added.
 
 **App won't start:**
-Make sure you're on Node 18+ (`node --version`) and have run `npm install`.
+Make sure you are on Node 18+ (`node --version`) and have run `npm install`.

@@ -94,7 +94,9 @@ function registerIpcHandlers() {
 
   ipcMain.handle('games:reenrich', async (event) => {
     const config = db.getConfig()
-    const games  = db.getGames().map(g => ({ ...g, coverArt: null, ocScore: null, ocTier: null, ocRecommend: null }))
+    // Only clear cover art — keep existing OC scores so we don't hammer the API
+    // for all 97+ games. Individual game refresh handles score re-fetching.
+    const games  = db.getGames().map(g => ({ ...g, coverArt: null }))
     const send   = (msg) => event.sender.send('enrich:progress', msg)
     const enriched = await enricher.enrichAll(games, config, send)
     db.setGames(enriched)
@@ -107,34 +109,22 @@ function registerIpcHandlers() {
     const game   = games.find(g => g.id === gameId)
     if (!game) return null
     if (game.coverArt) { try { fs.unlinkSync(game.coverArt) } catch (_) {} }
-    const u = { ...game, title: game.displayTitle || game.title, coverArt: null, ocScore: null, ocTier: null, ocRecommend: null }
+    const u = { ...game, coverArt: null }
     try { u.coverArt = await enricher.fetchCoverArt(u, config) } catch (_) {}
-    try {
-      const m = (game.ocUrl || '').match(/opencritic\.com\/game\/(\d+)/)
-      if (m) {
-        const d = await enricher.fetchOcById(m[1])
-        if (d) { u.ocScore = d.ocScore; u.ocTier = d.ocTier; u.ocRecommend = d.ocRecommend; u.ocUrl = d.ocUrl }
-      } else {
-        const oc = await enricher.fetchOcByTitle(u.title)
-        if (oc) { u.ocScore = oc.score; u.ocTier = oc.tier; u.ocRecommend = oc.recommend; u.ocUrl = oc.url }
-      }
-    } catch (_) {}
     db.setGames(games.map(g => g.id === gameId ? u : g))
     return u
   })
 
-  ipcMain.handle('oc:fetchById', async (_, gameId) => enricher.fetchOcById(gameId))
-
-  ipcMain.handle('games:setOc', async (_, { id, ocScore, ocTier, ocRecommend, ocUrl, canonicalName }) => {
+  ipcMain.handle('games:setSgdb', async (_, { id, sgdbGameId }) => {
     const config = db.getConfig()
-    let games = db.getGames()
-    const game = games.find(g => g.id === id)
+    const games  = db.getGames()
+    const game   = games.find(g => g.id === id)
     if (!game) return null
-    const u = { ...game, ocScore, ocTier, ocRecommend, ocUrl }
-    if (canonicalName && !u.coverArt) {
-      try { const c = await enricher.fetchCoverArt({ ...u, title: canonicalName }, config); if (c) u.coverArt = c } catch (_) {}
-    }
-    if (canonicalName && game.title !== canonicalName) u.displayTitle = canonicalName
+    const result = await enricher.fetchCoverArtBySgdbId(game, sgdbGameId, config)
+    if (!result) return { error: 'No cover art found for that SGDB game ID' }
+    const u = { ...game, coverArt: result.coverPath }
+    // If SGDB returned a canonical name, store it as displayTitle
+    if (result.sgdbName && result.sgdbName !== game.title) u.displayTitle = result.sgdbName
     db.setGames(games.map(g => g.id === id ? u : g))
     return u
   })
@@ -259,5 +249,56 @@ function registerIpcHandlers() {
     games[idx] = { ...games[idx], displayTitle: title.trim() || games[idx].title }
     db.setGames(games)
     return games[idx]
+  })
+
+  // ── Wishlist handlers ─────────────────────────────────────────────────────
+  const wishlistSvc = require('./wishlist')
+
+  ipcMain.handle('wishlist:get', () => db.getWishlist())
+
+  ipcMain.handle('wishlist:add', async (_, item) => {
+    const list = db.getWishlist()
+    if (list.find(w => w.id === item.id)) return list
+    const config = db.getConfig()
+    const entry = {
+      id: item.id,         // ITAD UUID
+      name: item.name,
+      itadId: item.id,     // keep explicit copy for price lookups
+      addedAt: new Date().toISOString(),
+      coverArt: null,
+    }
+    list.push(entry)
+    db.setWishlist(list)
+    // Fetch cover art in background so add feels instant
+    ;(async () => {
+      try {
+        const fakeGame = { id: 'wish_' + item.id, title: item.name, platform: 'Other', appId: null, displayTitle: null }
+        const coverPath = await enricher.fetchCoverArt(fakeGame, config)
+        if (coverPath) entry.coverArt = coverPath
+        const current = db.getWishlist()
+        const idx = current.findIndex(w => w.id === item.id)
+        if (idx >= 0) { current[idx] = { ...current[idx], ...entry }; db.setWishlist(current) }
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send('wishlist:enriched', db.getWishlist())
+        }
+      } catch (e) { console.error('[wishlist] enrich error:', e.message) }
+    })()
+    return list
+  })
+
+  ipcMain.handle('wishlist:remove', (_, id) => {
+    const list = db.getWishlist().filter(w => w.id !== id)
+    db.setWishlist(list)
+    return list
+  })
+
+  ipcMain.handle('wishlist:find', (_, query) => {
+    const config = db.getConfig()
+    return wishlistSvc.findGames(query, config.itadApiKey)
+  })
+
+  ipcMain.handle('wishlist:prices', (_, { itadId, country }) => {
+    const config = db.getConfig()
+    return wishlistSvc.fetchPrices(itadId, country || 'EE', config.itadApiKey)
   })
 }

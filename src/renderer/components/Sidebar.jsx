@@ -15,23 +15,23 @@ function isLight(hex) {
   } catch(_) { return false }
 }
 
-export default function Sidebar({ selectedPlatform, onSelectPlatform, platformCounts, totalCount }) {
+export default function Sidebar({ selectedPlatform, onSelectPlatform, platformCounts, totalCount, view, onSelectView, wishlistCount }) {
   const s     = useContext(SettingsContext)
   const font  = s.fontFamily         || 'Segoe UI'
   const base  = s.fontSizeBase       || 13
   const lbl   = s.fontSizeLabel      || 11
 
-  // Derive text colours from the sidebar background so they're always readable
-  // regardless of what fontColorPrimary is set to (e.g. dark ink on NASA-PUNK parchment)
   const sidebarBg = s.sidebarBackground || '#0c0e16'
   const lightSidebar = isLight(sidebarBg)
   const pri = lightSidebar ? '#1a1a14' : (s.fontColorPrimary   || '#ffffff')
   const sec = lightSidebar ? '#5a5a4a' : (s.fontColorSecondary || '#a0a8b8')
 
   const platforms = Object.keys(platformCounts).sort()
+  const wishlistActive = view === 'wishlist'
+  const wishlistColor  = '#e8a020'
 
   function PlatformRow({ name, count, isAll }) {
-    const active = selectedPlatform === name
+    const active = view === 'library' && selectedPlatform === name
     const pc     = (s.platformColors || {})[name]
     const color  = isAll ? '#4a80c0' : (pc?.primary || PLATFORM_DEFAULTS[name] || '#888')
     return (
@@ -53,8 +53,8 @@ export default function Sidebar({ selectedPlatform, onSelectPlatform, platformCo
     )
   }
 
-  const bg     = s.sidebarBackground  || '#0c0e16'
-  const border  = s.borderColor         || 'rgba(255,255,255,0.06)'
+  const bg    = s.sidebarBackground || '#0c0e16'
+  const border = s.borderColor      || 'rgba(255,255,255,0.06)'
 
   return (
     <div style={{ width: 168, background: bg, borderRight: `1px solid ${border}`,
@@ -69,6 +69,30 @@ export default function Sidebar({ selectedPlatform, onSelectPlatform, platformCo
         textTransform: 'uppercase', opacity: 0.5, fontFamily: font }}>Platforms</div>
 
       {platforms.map(p => <PlatformRow key={p} name={p} count={platformCounts[p]} />)}
+
+      {/* Wishlist section */}
+      <div style={{ margin: '10px 14px 6px', height: 1, background: lightSidebar ? 'rgba(0,0,0,0.10)' : 'rgba(255,255,255,0.06)' }} />
+      <div
+        onClick={() => onSelectView('wishlist')}
+        style={{
+          display: 'flex', alignItems: 'center', gap: 9, padding: '7px 14px',
+          cursor: 'pointer', borderRadius: 7, margin: '1px 6px', transition: 'all 0.15s',
+          background: wishlistActive ? `${wishlistColor}22` : 'transparent',
+          borderLeft: `2px solid ${wishlistActive ? wishlistColor : 'transparent'}`,
+        }}
+        onMouseEnter={e => { if (!wishlistActive) e.currentTarget.style.background = lightSidebar ? 'rgba(0,0,0,0.05)' : 'rgba(255,255,255,0.04)' }}
+        onMouseLeave={e => { if (!wishlistActive) e.currentTarget.style.background = 'transparent' }}
+      >
+        <span style={{ fontSize: 13, opacity: 0.8 }}>★</span>
+        <span style={{ flex: 1, fontSize: lbl, fontWeight: wishlistActive ? 700 : 500,
+          color: wishlistActive ? pri : sec, fontFamily: font, letterSpacing: '0.03em' }}>Wishlist</span>
+        {wishlistCount > 0 && (
+          <span style={{ fontSize: 10, color: wishlistActive ? wishlistColor : sec,
+            opacity: wishlistActive ? 1 : 0.6,
+            background: wishlistActive ? `${wishlistColor}22` : 'rgba(255,255,255,0.05)',
+            padding: '1px 6px', borderRadius: 10, fontFamily: font }}>{wishlistCount}</span>
+        )}
+      </div>
     </div>
   )
 }

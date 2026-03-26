@@ -12,12 +12,6 @@ const PLATFORM_DEFAULTS = {
   EA:      { primary: '#ff6b35', intensity: 0.10 },
 }
 
-function tierColor(tier) {
-  if (tier === 'Mighty') return '#00c896'
-  if (tier === 'Strong') return '#4a90e2'
-  if (tier === 'Fair')   return '#f0a020'
-  return '#e05050'
-}
 
 function formatSize(bytes) {
   if (!bytes || bytes === 0) return null
@@ -27,55 +21,10 @@ function formatSize(bytes) {
 }
 
 // ── Option C: pill badge — lives INSIDE cover div (overflow:hidden is fine) ──
-function PillBadge({ game }) {
-  if (!game.ocTier) return null
-  const col = tierColor(game.ocTier)
-  return (
-    <div style={{
-      position: 'absolute', top: 7, right: 7, zIndex: 2,
-      padding: '4px 8px', borderRadius: 20, background: col,
-      display: 'flex', alignItems: 'center', gap: 5,
-      boxShadow: '0 2px 8px rgba(0,0,0,0.55)',
-    }}>
-      <span style={{ fontSize: 12, fontWeight: 900, color: '#fff', lineHeight: 1, letterSpacing: '-0.3px' }}>
-        {game.ocScore ?? '?'}
-      </span>
-      <span style={{ width: 1, height: 11, background: 'rgba(255,255,255,0.4)', display: 'inline-block' }} />
-      <span style={{ fontSize: 7, fontWeight: 700, color: 'rgba(255,255,255,0.88)', letterSpacing: '0.07em', textTransform: 'uppercase' }}>
-        {game.ocTier}
-      </span>
-    </div>
-  )
-}
 
 // ── Option F: review badge — lives on the CARD wrapper, NOT inside the cover ──
 // Positioned absolutely on the card so it's never clipped by cover's overflow:hidden.
 // `coverHeight` tells it exactly where the cover/title boundary is.
-function ReviewBadge({ game, coverHeight }) {
-  if (!game.ocTier) return null
-  const col = tierColor(game.ocTier)
-  const BADGE_R = 23   // radius — badge is 46px wide
-  return (
-    <div style={{
-      position: 'absolute',
-      top: coverHeight - BADGE_R,   // straddles the cover bottom edge
-      left: '50%', transform: 'translateX(-50%)',
-      width: BADGE_R * 2, height: BADGE_R * 2, borderRadius: '50%',
-      background: col,
-      display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-      boxShadow: `0 0 18px ${col}66, 0 4px 12px rgba(0,0,0,0.7)`,
-      border: '2px solid rgba(255,255,255,0.18)',
-      zIndex: 10, pointerEvents: 'none',
-    }}>
-      <span style={{ fontSize: 14, fontWeight: 900, color: '#fff', lineHeight: 1, letterSpacing: '-0.5px' }}>
-        {game.ocScore ?? '?'}
-      </span>
-      <span style={{ fontSize: 6, fontWeight: 700, color: 'rgba(255,255,255,0.82)', letterSpacing: '0.06em', textTransform: 'uppercase', marginTop: 1 }}>
-        {game.ocTier}
-      </span>
-    </div>
-  )
-}
 
 function isLight(hex) {
   try {
@@ -98,9 +47,7 @@ export default function GameGrid({ games, selectedGame, onSelectGame, hiddenIds 
   const sec  = s.fontColorSecondary  || '#7a7f9a'
   const appBg          = s.appBackground    || '#0c0e16'
   const titleSize      = s.fontSizeTitle    || 15
-  const scoreBadgeStyle = s.scoreBadgeStyle || 'pill'
-  const isReview       = scoreBadgeStyle === 'review'
-
+    
   if (games.length === 0) return (
     <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
       color: sec, fontSize: s.fontSizeBase || 13, fontFamily: font, background: appBg }}>
@@ -120,8 +67,7 @@ export default function GameGrid({ games, selectedGame, onSelectGame, hiddenIds 
           const sizeLabel   = s.showSizeOnCards ? formatSize(game.sizeBytes) : null
           const displayTitle = game.displayTitle || game.title
           // Extra top padding on title area so review badge doesn't overlap game name
-          const titlePadTop = isReview && game.ocTier ? '26px' : '7px'
-
+          
           return (
             <div key={game.id} onClick={() => onSelectGame(game)} style={{
               width: W, flexShrink: 0, cursor: 'pointer', borderRadius: 10,
@@ -168,16 +114,10 @@ export default function GameGrid({ games, selectedGame, onSelectGame, hiddenIds 
                     background: 'rgba(0,0,0,0.7)', fontSize: 9, color: sec, fontFamily: font,
                   }}>{sizeLabel}</div>
                 )}
-
-                {/* Pill badge lives inside cover — fine with overflow:hidden */}
-                {scoreBadgeStyle === 'pill' && <PillBadge game={game} />}
               </div>
 
-              {/* Review badge lives on the CARD, not inside cover, so it's never clipped */}
-              {isReview && <ReviewBadge game={game} coverHeight={H} />}
-
               {/* Title */}
-              <div style={{ padding: `${titlePadTop} 8px 8px`, fontFamily: font }}>
+              <div style={{ padding: '7px 8px 8px', fontFamily: font }}>
                 <div style={{
                   fontSize: titleSize, color: cardTitleColor, fontWeight: 600, lineHeight: 1.25,
                   overflow: 'hidden', display: '-webkit-box',

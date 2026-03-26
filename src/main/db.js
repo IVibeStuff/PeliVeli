@@ -7,7 +7,8 @@ const GAMES_FILE   = path.join(DATA_DIR, 'games.json')
 const CONFIG_FILE  = path.join(DATA_DIR, 'config.json')
 const META_FILE    = path.join(DATA_DIR, 'scanmeta.json')
 const SETTINGS_FILE= path.join(DATA_DIR, 'settings.json')
-const HIDDEN_FILE  = path.join(DATA_DIR, 'hidden.json')
+const HIDDEN_FILE    = path.join(DATA_DIR, 'hidden.json')
+const WISHLIST_FILE  = path.join(DATA_DIR, 'wishlist.json')
 
 function read(file, def) {
   try { return JSON.parse(fs.readFileSync(file, 'utf8')) } catch (_) { return def }
@@ -25,7 +26,9 @@ module.exports = {
   setScanMeta: (m) => write(META_FILE, m),
   getSettings: ()  => read(SETTINGS_FILE, {}),
   setSettings: (s) => write(SETTINGS_FILE, s),
-  getHiddenIds:()  => read(HIDDEN_FILE, []),
-  hideGame:    (id)=> { const h = read(HIDDEN_FILE, []); if (!h.includes(id)) { h.push(id); write(HIDDEN_FILE, h) } },
-  unhideGame:  (id)=> write(HIDDEN_FILE, read(HIDDEN_FILE, []).filter(x => x !== id)),
+  getHiddenIds:   ()  => read(HIDDEN_FILE, []),
+  hideGame:       (id)=> { const h = read(HIDDEN_FILE, []); if (!h.includes(id)) { h.push(id); write(HIDDEN_FILE, h) } },
+  unhideGame:     (id)=> write(HIDDEN_FILE, read(HIDDEN_FILE, []).filter(x => x !== id)),
+  getWishlist:    ()  => read(WISHLIST_FILE, []),
+  setWishlist:    (w) => write(WISHLIST_FILE, w),
 }

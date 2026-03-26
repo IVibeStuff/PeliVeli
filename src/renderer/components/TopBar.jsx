@@ -11,7 +11,7 @@ function isLight(hex) {
   } catch(_) { return false }
 }
 
-export default function TopBar({ search, onSearch, sortBy, onSort, onScan, onAddGame, scanning, gameCount, totalCount, onOpenSettings }) {
+export default function TopBar({ search, onSearch, sortBy, onSort, onScan, onAddGame, scanning, gameCount, totalCount, onOpenSettings, view }) {
   const s    = useContext(SettingsContext)
   const font  = s.fontFamily  || 'Calibri, Segoe UI, sans-serif'
   const lbl   = s.fontSizeLabel || 11
@@ -52,31 +52,44 @@ export default function TopBar({ search, onSearch, sortBy, onSort, onScan, onAdd
             letterSpacing: '0.03em', fontFamily: font, outline: 'none' }} />
       </div>
 
-      {/* Sort buttons */}
-      <div className="titlebar-no-drag" style={{ display: 'flex', gap: 5 }}>
-        {[['alpha','A–Z'],['platform','Platform'],['size','Size'],['score','Score']].map(([val, label]) => (
-          <button key={val} onClick={() => onSort(val)} style={{
-            padding: '6px 11px',
-            background: sortBy.key === val ? sortActiveBg : 'transparent',
-            border: `1px solid ${sortBy.key === val ? sortActiveBdr : sortInactiveBdr}`,
-            borderRadius: 7, cursor: 'pointer', transition: 'all 0.15s',
-            color: sortBy.key === val ? pri : sec, fontSize: lbl, fontWeight: 600,
-            letterSpacing: '0.04em', fontFamily: font,
-          }}>
-            {label}{sortBy.key === val ? (sortBy.dir === 'asc' ? ' ↑' : ' ↓') : ''}
-          </button>
-        ))}
-      </div>
+      {/* Sort buttons — library only */}
+      {view !== 'wishlist' && (
+        <div className="titlebar-no-drag" style={{ display: 'flex', gap: 5 }}>
+          {[['alpha','A–Z'],['platform','Platform'],['size','Size']].map(([val, label]) => (
+            <button key={val} onClick={() => onSort(val)} style={{
+              padding: '6px 11px',
+              background: sortBy.key === val ? sortActiveBg : 'transparent',
+              border: `1px solid ${sortBy.key === val ? sortActiveBdr : sortInactiveBdr}`,
+              borderRadius: 7, cursor: 'pointer', transition: 'all 0.15s',
+              color: sortBy.key === val ? pri : sec, fontSize: lbl, fontWeight: 600,
+              letterSpacing: '0.04em', fontFamily: font,
+            }}>
+              {label}{sortBy.key === val ? (sortBy.dir === 'asc' ? ' ↑' : ' ↓') : ''}
+            </button>
+          ))}
+        </div>
+      )}
 
-      {/* Game count */}
-      <span className="titlebar-no-drag" style={{
-        fontSize: lbl, color: sec, opacity: 0.7,
-        padding: '5px 10px', background: countBg,
-        border: `1px solid ${countBorder}`, borderRadius: 6,
-        whiteSpace: 'nowrap',
-      }}>
-        {gameCount === totalCount ? `${totalCount} games` : `${gameCount} / ${totalCount}`}
-      </span>
+      {/* View label / game count */}
+      {view === 'wishlist' ? (
+        <span className="titlebar-no-drag" style={{
+          fontSize: lbl, color: '#e8a020', opacity: 0.9,
+          padding: '5px 10px', background: 'rgba(232,160,32,0.08)',
+          border: '1px solid rgba(232,160,32,0.2)', borderRadius: 6,
+          whiteSpace: 'nowrap', fontFamily: "'Bebas Neue', cursive", letterSpacing: '0.08em',
+        }}>
+          ★ WISHLIST
+        </span>
+      ) : (
+        <span className="titlebar-no-drag" style={{
+          fontSize: lbl, color: sec, opacity: 0.7,
+          padding: '5px 10px', background: countBg,
+          border: `1px solid ${countBorder}`, borderRadius: 6,
+          whiteSpace: 'nowrap',
+        }}>
+          {gameCount === totalCount ? `${totalCount} games` : `${gameCount} / ${totalCount}`}
+        </span>
+      )}
 
       <div style={{ flex: 1 }} />
 

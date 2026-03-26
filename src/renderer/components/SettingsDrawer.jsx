@@ -54,7 +54,7 @@ const THEME_PRESETS = [
 ]
 
 // ── Component ─────────────────────────────────────────────────────────────────
-export default function SettingsDrawer({ settings, onSave, onClose, onReEnrich, onReconfigure, customThemes = [], onCustomThemesChange }) {
+export default function SettingsDrawer({ settings, onSave, onClose, onReEnrich, onReconfigure, onReconfigureItad, customThemes = [], onCustomThemesChange }) {
   const [local, setLocal]               = useState(() => JSON.parse(JSON.stringify(settings)))
   const [fonts, setFonts]               = useState([])
   const [loadingFonts, setLoadingFonts] = useState(true)
@@ -160,7 +160,7 @@ export default function SettingsDrawer({ settings, onSave, onClose, onReEnrich, 
 
         {/* Tabs */}
         <div style={{ display:'flex', borderBottom:'1px solid rgba(128,128,128,0.15)', flexShrink:0 }}>
-          {[['themes','Themes'],['appearance','Appearance'],['platforms','Platforms'],['library','Library'],['account','Account']].map(([id,label]) => (
+          {[['themes','Themes'],['appearance','Appearance'],['platforms','Platforms'],['library','Library'],['wishlist','Wishlist'],['account','Account']].map(([id,label]) => (
             <button key={id} onClick={()=>setActiveTab(id)} style={{
               flex:1, padding:'10px 2px', background:'transparent', border:'none',
               borderBottom:`2px solid ${activeTab===id ? '#4a80c0' : 'transparent'}`,
@@ -459,27 +459,6 @@ export default function SettingsDrawer({ settings, onSave, onClose, onReEnrich, 
                 </div>
               </Group>
 
-              <Group label="Score Badge Style" sec={sec}>
-                <p style={{ fontSize:lbl, color:sec, marginBottom:12, lineHeight:1.6 }}>
-                  How the OpenCritic score appears on each game card.
-                </p>
-                <div style={{ display:'flex', gap:8 }}>
-                  {[
-                    { value:'pill',   label:'Pill',          desc:'Score + tier label in top corner' },
-                    { value:'review', label:'Review Badge',  desc:'Large circle overlapping the card bottom' },
-                  ].map(({value,label,desc}) => (
-                    <button key={value} onClick={()=>setLocal(s=>({...s,scoreBadgeStyle:value}))} style={{
-                      flex:1, padding:'10px 8px',
-                      background: (local.scoreBadgeStyle||'pill')===value ? 'rgba(74,128,192,0.18)' : 'rgba(128,128,128,0.12)',
-                      border: `1px solid ${(local.scoreBadgeStyle||'pill')===value ? '#4a80c055' : 'rgba(255,255,255,0.08)'}`,
-                      borderRadius:9, cursor:'pointer', transition:'all 0.15s', fontFamily:font }}>
-                      <div style={{ fontSize:base, color:(local.scoreBadgeStyle||'pill')===value ? '#90b8f0' : pri, fontWeight:600 }}>{label}</div>
-                      <div style={{ fontSize:10, color:sec, marginTop:2, opacity:0.6, lineHeight:1.4 }}>{desc}</div>
-                    </button>
-                  ))}
-                </div>
-              </Group>
-
               <Group label="Game Cards" sec={sec}>
                 <Toggle label="Show install size on cards"
                   description="Displays a size badge (e.g. 48 GB) on each game card."
@@ -493,11 +472,60 @@ export default function SettingsDrawer({ settings, onSave, onClose, onReEnrich, 
                 </div>
               </Group>
 
-              <Group label="Cover Art & Scores" sec={sec}>
+              <Group label="Cover Art" sec={sec}>
                 <p style={{ fontSize:lbl, color:sec, marginBottom:10, lineHeight:1.6 }}>
-                  Re-fetch all cover art and OpenCritic scores from scratch.
+                  Re-fetch all cover art from scratch.
                 </p>
-                <ActionBtn onClick={()=>{ onReEnrich(); onClose() }} pri={pri}>↺ Re-fetch Cover Art & Scores</ActionBtn>
+                <ActionBtn onClick={()=>{ onReEnrich(); onClose() }} pri={pri}>↺ Re-fetch Cover Art</ActionBtn>
+              </Group>
+            </div>
+          )}
+
+          {/* ── WISHLIST TAB ── */}
+          {activeTab==='wishlist' && (
+            <div>
+              <Group label="Pricing Country" sec={sec}>
+                <p style={{ fontSize:lbl, color:sec, marginBottom:12, lineHeight:1.6 }}>
+                  Prices are shown in your country's local currency via IsThereAnyDeal.
+                </p>
+                <select
+                  value={local.wishlistCountry || 'EE'}
+                  onChange={e => setLocal(s => ({ ...s, wishlistCountry: e.target.value }))}
+                  style={{
+                    width: '100%', padding: '9px 12px',
+                    background: 'rgba(128,128,128,0.15)',
+                    border: '1px solid rgba(128,128,128,0.25)',
+                    borderRadius: 8, color: pri, fontSize: base,
+                    fontFamily: font, cursor: 'pointer', outline: 'none',
+                  }}
+                >
+                  {[
+                    ['EE','Estonia (EUR €)'],
+                    ['FI','Finland (EUR €)'],
+                    ['DE','Germany (EUR €)'],
+                    ['FR','France (EUR €)'],
+                    ['NL','Netherlands (EUR €)'],
+                    ['PL','Poland (PLN zł)'],
+                    ['SE','Sweden (SEK kr)'],
+                    ['NO','Norway (NOK kr)'],
+                    ['DK','Denmark (DKK kr)'],
+                    ['GB','United Kingdom (GBP £)'],
+                    ['US','United States (USD $)'],
+                    ['CA','Canada (CAD C$)'],
+                    ['AU','Australia (AUD A$)'],
+                    ['BR','Brazil (BRL R$)'],
+                    ['TR','Turkey (TRY ₺)'],
+                  ].map(([val, label]) => (
+                    <option key={val} value={val}>{label}</option>
+                  ))}
+                </select>
+              </Group>
+              <Group label="About" sec={sec}>
+                <p style={{ fontSize:lbl, color:sec, lineHeight:1.6 }}>
+                  Prices are sourced from IsThereAnyDeal, covering Steam, GOG, Fanatical,
+                  Humble Store, Green Man Gaming, and other legitimate stores.
+                  Requires a free API key in Settings → Account.
+                </p>
               </Group>
             </div>
           )}
@@ -512,9 +540,16 @@ export default function SettingsDrawer({ settings, onSave, onClose, onReEnrich, 
                 </p>
                 <ActionBtn onClick={onReconfigure} pri={pri}>Update SteamGridDB Key</ActionBtn>
               </Group>
+              <Group label="IsThereAnyDeal API Key" sec={sec}>
+                <p style={{ fontSize:lbl, color:sec, marginBottom:12, lineHeight:1.6 }}>
+                  Required for Wishlist pricing. Get a free key at{' '}
+                  <strong style={{color:'#4a90c0'}}>isthereanydeal.com/apps/my/</strong>.
+                </p>
+                <ActionBtn onClick={onReconfigureItad} pri={pri}>Update IsThereAnyDeal Key</ActionBtn>
+              </Group>
               <Group label="Diagnostics" sec={sec}>
                 <p style={{ fontSize:lbl, color:sec, marginBottom:12, lineHeight:1.6 }}>
-                  A debug log records every OpenCritic and SteamGridDB lookup.
+                  A debug log records every SteamGridDB lookup.
                 </p>
                 <ActionBtn pri={pri} onClick={async () => {
                   const p = await window.peliVeli.getDebugLogPath()
